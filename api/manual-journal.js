@@ -200,7 +200,10 @@ function buildMutationArguments(action, args) {
 }
 
 async function mutate(action, args, env) {
-  const result = await redisCommand("/eval", "POST", [
+  // Upstash REST accepts the complete Redis command as a JSON array at the
+  // database root. The command name must be the first array element.
+  const result = await redisCommand("", "POST", [
+    "EVAL",
     MUTATE_SCRIPT,
     "1",
     JOURNAL_KEY,
