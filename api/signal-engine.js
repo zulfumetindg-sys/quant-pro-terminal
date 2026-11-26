@@ -1,4 +1,6 @@
 
+const { measureVolatilityShock } = require("./volatility");
+
 const SYMBOL = "XAU/USD";
 const MARKET = "XAUUSD";
 
@@ -326,6 +328,7 @@ function createSignal(candles, h4Candles, currentPrice) {
   }
 
   const side = h1.trend;
+  const volatilityShock = measureVolatilityShock(candles);
   const risk = Math.max(
     atr * STOP_ATR,
     Math.abs(currentPrice) * 0.001
@@ -357,6 +360,7 @@ function createSignal(candles, h4Candles, currentPrice) {
     macdHistogram: Number(histogram.toFixed(5)),
     macdFilter: "12/26/9 HISTOGRAM DIRECTION",
     atr: Number(atr.toFixed(3)),
+    volatilityShock,
     stopATR: STOP_ATR,
     sl: Number(sl.toFixed(3)),
     tp: Number(tp.toFixed(3)),
