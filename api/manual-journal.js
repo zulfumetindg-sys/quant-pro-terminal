@@ -134,6 +134,9 @@ elseif action == 'close' then
   if state.activeTradeId == '' then
     return cjson.encode({ ok = false, error = 'NO_ACTIVE_TRADE' })
   end
+  if state.activeTradeId ~= ARGV[4] then
+    return cjson.encode({ ok = false, error = 'TRADE_ID_NOT_ACTIVE' })
+  end
   local found = false
   for _, trade in ipairs(state.trades) do
     if trade.tradeId == state.activeTradeId and trade.status == 'OPEN' then
@@ -160,7 +163,7 @@ elseif action == 'close' then
 else
   return cjson.encode({ ok = false, error = 'ACTION_INVALID' })
 end
-while #state.trades > tonumber(ARGV[4]) do
+while #state.trades > tonumber(ARGV[5]) do
   if state.trades[1].status == 'OPEN' then break end
   table.remove(state.trades, 1)
 end
@@ -218,7 +221,8 @@ module.exports = async function handler(req, res) {
       if (!validated.ok) return res.status(400).json(validated);
       const result = await mutate("close", [
         String(validated.exitPrice),
-        validated.closedAt
+        validated.closedAt,
+        validated.tradeId
       ], process.env);
       return res.status(result.ok ? 200 : 409).json(result);
     }
