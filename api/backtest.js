@@ -186,6 +186,8 @@ function getMetrics(trades) {
     averageR: trades.length
       ? +(net / trades.length).toFixed(3)
       : null,
+    grossWinR: +grossWin.toFixed(3),
+    grossLossR: +grossLoss.toFixed(3),
     insufficientSample: trades.length < 30
   };
 }
@@ -677,4 +679,11 @@ module.exports = async function handler(req, res) {
       message: error.message
     });
   }
+};
+
+
+// Export pure strategy functions for the Node test runner. The default export remains the Vercel handler.
+module.exports.__test = {
+  parseTime, emaSeries, ema, makeH4, trend, buildIndicators,
+  getMetrics, getSignal, calculateTrade, runBacktest, runForwardTest
 };
