@@ -53,6 +53,22 @@ function normalizeCandles(values) {
   return [...byTime.values()].sort((a, b) => a.time - b.time);
 }
 
+function checkLatestCompletedH1Freshness(candles, now = Date.now(), maxAgeMs = 2 * 3600000) {
+  if (!Array.isArray(candles) || candles.length === 0) {
+    return { fresh: false, ageMs: null, reason: "H1_CANDLES_UNAVAILABLE" };
+  }
+  const last = candles[candles.length - 1];
+  const closedAt = Number(last.time) + 3600000;
+  const ageMs = now - closedAt;
+  if (!Number.isFinite(closedAt) || !Number.isFinite(ageMs) || ageMs < 0) {
+    return { fresh: false, ageMs: null, reason: "H1_CANDLE_CLOSE_TIME_INVALID" };
+  }
+  if (ageMs > maxAgeMs) {
+    return { fresh: false, ageMs, reason: "H1_CANDLES_STALE" };
+  }
+  return { fresh: true, ageMs, reason: null };
+}
+
 function emaSeries(values, period) {
   const out = Array(values.length).fill(null);
   if (values.length < period) return out;
@@ -487,11 +503,16 @@ module.exports = async function handler(req, res) {
       };
     }
 
-    const signal = createSignal(
-      candles,
-      h4Candles,
-      quote.status === "ok" ? quote.price : null
-    );
+    const h1CandleFreshness = checkLatestCompletedH1Freshness(candles);
+    const signal = h1CandleFreshness.fresh
+      ? createSignal(candles, h4Candles, quote.status === "ok" ? quote.price : null)
+      : {
+          ...createSignal(candles, h4Candles, null),
+          reason: h1CandleFreshness.reason,
+          h1CandleAgeSeconds: h1CandleFreshness.ageMs === null
+            ? null
+            : Math.floor(h1CandleFreshness.ageMs / 1000)
+        };
 
     const payload = {
       ok: true,
@@ -517,6 +538,13 @@ module.exports = async function handler(req, res) {
         adxFilter: false
       },
       quote,
+      h1CandleFreshness: {
+        ...h1CandleFreshness,
+        ageSeconds: h1CandleFreshness.ageMs === null
+          ? null
+          : Math.floor(h1CandleFreshness.ageMs / 1000),
+        maxAgeSeconds: 7200
+      },
       h1: analyzeTrend(candles, 20, 50),
       h4: analyzeTrend(h4Candles, 8, 20),
       signal,
@@ -540,4 +568,4 @@ module.exports = async function handler(req, res) {
 
 
 // Export pure functions for deterministic automated tests. The default export remains the Vercel handler.
-module.exports.__test = { parseTime, normalizeCandles, emaSeries, ema, aggregateH4, calculateMACDHistogram, calculateATR, analyzeTrend, createSignal, getLatestQuote };
+module.exports.__test = { parseTime, normalizeCandles, checkLatestCompletedH1Freshness, emaSeries, ema, aggregateH4, calculateMACDHistogram, calculateATR, analyzeTrend, createSignal, getLatestQuote };
