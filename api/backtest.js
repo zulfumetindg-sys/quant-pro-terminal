@@ -8,6 +8,24 @@ const COST = {
   commissionPerTradeUSD: 0
 };
 
+const PERIODS = [
+  {
+    name: "MAYIS_HAZIRAN",
+    start: "2026-05-01T00:00:00.000Z",
+    end: "2026-07-01T00:00:00.000Z"
+  },
+  {
+    name: "TEMMUZ_AGUSTOS",
+    start: "2026-07-01T00:00:00.000Z",
+    end: "2026-09-01T00:00:00.000Z"
+  },
+  {
+    name: "EYLUL_KASIM",
+    start: "2026-09-01T00:00:00.000Z",
+    end: "2026-12-01T00:00:00.000Z"
+  }
+];
+
 function parseTime(value) {
   const s = String(value).replace(" ", "T");
   return Date.parse(s.endsWith("Z") ? s : s + "Z");
@@ -82,13 +100,12 @@ function makeH4(candles) {
 
   return [...groups.entries()]
     .sort((a, b) => a[0] - b[0])
-    .filter(([start, group]) => {
-      if (group.length !== 4) return false;
-
-      return group.every((c, i) =>
+    .filter(([start, group]) =>
+      group.length === 4 &&
+      group.every((c, i) =>
         c.time === start + i * 3600000
-      );
-    })
+      )
+    )
     .map(([start, group]) => ({
       time: start,
       end: start + 4 * 3600000,
@@ -120,8 +137,11 @@ function calculateMetrics(trades) {
   const wins = trades.filter(t => t.netR > 0);
   const losses = trades.filter(t => t.netR < 0);
 
-  const profit = wins.reduce((s, t) => s + t.netR, 0);
-  const loss = Math.abs(losses.reduce((s, t) => s + t.netR, 0));
+  const grossProfit = wins.reduce((s, t) => s + t.netR, 0);
+  const grossLoss = Math.abs(
+    losses.reduce((s, t) => s + t.netR, 0)
+  );
+
   const net = trades.reduce((s, t) => s + t.netR, 0);
 
   let equity = 0;
@@ -140,37 +160,38 @@ function calculateMetrics(trades) {
     tradeCount: count,
     winCount: wins.length,
     lossCount: losses.length,
-    winRatePercent: count >= 30
+    winRatePercent: count
       ? Number((wins.length / count * 100).toFixed(2))
       : null,
-    profitFactor: loss > 0
-      ? Number((profit / loss).toFixed(3))
+    profitFactor: grossLoss > 0
+      ? Number((grossProfit / grossLoss).toFixed(3))
       : null,
     netProfitR: Number(net.toFixed(2)),
     maxDrawdownR: Number(maxDD.toFixed(2)),
     averageR: count
       ? Number((net / count).toFixed(3))
       : null,
-    insufficientSample: count < 30,
-    lastTrades: trades.slice(-10).map(t => ({
-      side: t.side,
-      entry: Number(t.entry.toFixed(3)),
-      exit: Number(t.exit.toFixed(3)),
-      netR: Number(t.netR.toFixed(3)),
-      exitReason: t.exitReason
-    }))
+    insufficientSample: count < 30
   };
 }
 
-function runScenario(candles, slippage) {
-  const h4 = makeH4(candles);
+function runPeriod(candles, h4, slippage, period) {
   const trades = [];
   const halfSpread = COST.spreadUSD / 2;
 
+  const startTime = Date.parse(period.start);
+  const endTime = Date.parse(period.end);
+
   let h4Index = -1;
+
+  const endIndex = candles.findIndex(c => c.time >= endTime);
+  const lastIndex = endIndex === -1
+    ? candles.length - 1
+    : endIndex - 1;
+
   let i = 60;
 
-  while (i < candles.length - 2) {
+  while (i < lastIndex) {
     const signalCloseTime = candles[i].time + 3600000;
 
     while (
@@ -181,6 +202,14 @@ function runScenario(candles, slippage) {
     }
 
     if (h4Index < 20) {
+      i++;
+      continue;
+    }
+
+    const next = candles[i + 1];
+
+    // İşlem yalnızca ilgili dönemde açılabilir.
+    if (next.time < startTime || next.time >= endTime) {
       i++;
       continue;
     }
@@ -206,14 +235,12 @@ function runScenario(candles, slippage) {
     }
 
     const side = h1Trend;
-    const next = candles[i + 1];
 
     const riskDistance = Math.max(
       volatility * 1.5,
       Math.abs(next.open) * 0.001
     );
 
-    // OHLC verisi orta fiyat kabul edilerek yaklaşık bid/ask uygulanır.
     const entry = side === "BUY"
       ? next.open + halfSpread + slippage
       : next.open - halfSpread - slippage;
@@ -230,13 +257,12 @@ function runScenario(candles, slippage) {
     let exitReason = "TIME_EXIT";
     let exitIndex = i + 1;
 
-    const maxHold = Math.min(i + 72, candles.length - 1);
+    // İşlem, test edilen dönemin dışına taşamaz.
+    const maxHold = Math.min(i + 72, lastIndex);
 
     for (let j = i + 1; j <= maxHold; j++) {
       const c = candles[j];
 
-      // BUY pozisyonu bid fiyatından kapatılır.
-      // SELL pozisyonu ask fiyatından kapatılır.
       const bidLow = c.low - halfSpread;
       const bidHigh = c.high - halfSpread;
       const askLow = c.low + halfSpread;
@@ -250,7 +276,7 @@ function runScenario(candles, slippage) {
         ? bidHigh >= tp
         : askLow <= tp;
 
-      // Aynı mumda SL ve TP: kötümser varsayım, SL önce.
+      // Aynı mumda SL ve TP: SL önce kabul edilir.
       if (hitSL) {
         exit = side === "BUY"
           ? sl - slippage
@@ -287,14 +313,14 @@ function runScenario(candles, slippage) {
       ? exit - entry
       : entry - exit;
 
-    const commission = COST.commissionPerTradeUSD;
-    const netR = (priceProfit - commission) / riskDistance;
+    const netR = (
+      priceProfit - COST.commissionPerTradeUSD
+    ) / riskDistance;
 
     trades.push({
       side,
       entry,
       exit,
-      risk: riskDistance,
       netR,
       exitReason,
       entryTime: new Date(next.time).toISOString(),
@@ -305,12 +331,13 @@ function runScenario(candles, slippage) {
   }
 
   return {
+    period: period.name,
+    start: period.start,
+    endExclusive: period.end,
     assumptions: {
       spreadUSD: COST.spreadUSD,
       slippagePerSideUSD: slippage,
-      commissionPerTradeUSD: COST.commissionPerTrade,
-      estimatedSpreadPlusSlippageUSD:
-        Number((COST.spreadUSD + 2 * slippage).toFixed(3))
+      commissionPerTradeUSD: COST.commissionPerTradeUSD
     },
     metrics: calculateMetrics(trades)
   };
@@ -385,20 +412,24 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    const h4 = makeH4(candles);
+
     const scenarios = COST.slippagePerSideUSD.map(slippage => ({
       name: `SLIPPAGE_${slippage.toFixed(2)}_PER_SIDE`,
-      ...runScenario(candles, slippage)
+      periods: PERIODS.map(period =>
+        runPeriod(candles, h4, slippage, period)
+      )
     }));
 
     return res.status(200).json({
       ok: true,
-      engine: "QUANT PRO XAUUSD BACKTEST V3",
-      mode: "SIGNALS_ONLY",
+      engine: "QUANT PRO XAUUSD BACKTEST V4",
       market: MARKET,
       symbol: SYMBOL,
       timeframe: "H1 + COMPLETED H4",
       provider: "Twelve Data",
       candleCount: candles.length,
+      h4CandleCount: h4.length,
       firstCandle: new Date(candles[0].time).toISOString(),
       lastCandle: new Date(candles[candles.length - 1].time).toISOString(),
 
@@ -416,16 +447,22 @@ module.exports = async function handler(req, res) {
         ohlcAssumedMidPrice: true,
         spreadUSD: COST.spreadUSD,
         slippagePerSideUSD: COST.slippagePerSideUSD,
-        commissionPerTradeUSD: COST.commissionPerTrade,
+        commissionPerTradeUSD: COST.commissionPerTradeUSD,
         historicalXMSpreadAvailable: false,
-        commissionVerified: false,
-        note: "Fixed spread approximation. Not historical XM bid/ask or tick-level execution data."
+        commissionVerified: false
+      },
+
+      periodMethod: {
+        indicatorWarmupUsesEarlierCandles: true,
+        tradesCountedOnlyInTheirEntryPeriod: true,
+        tradesCannotExitOutsideTheirPeriod: true,
+        periods: PERIODS
       },
 
       scenarios,
       sampleRequirement: 30,
       executionStatus: "NOT_TRADE_READY",
-      warning: "Backtest results are historical simulations, not guaranteed future performance.",
+      warning: "Bu sonuçlar OHLC verisiyle yapılan yaklaşık simülasyondur; tarihsel XM bid/ask veya tick verisi değildir.",
       generatedAt: new Date().toISOString()
     });
 
