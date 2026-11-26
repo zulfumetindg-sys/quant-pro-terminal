@@ -593,7 +593,7 @@ test("manual journal API reads Redis and sends an authenticated atomic open comm
       requestedUrl = String(url);
       if (options.method === "GET") return response(null);
       command = JSON.parse(options.body);
-      const incoming = JSON.parse(command[4]);
+      const incoming = JSON.parse(command[5]);
       return response(JSON.stringify({
         ok: true,
         state: { trades: [incoming], activeTradeId: incoming.tradeId }
@@ -625,13 +625,14 @@ test("manual journal API reads Redis and sends an authenticated atomic open comm
     }, postRes);
     assert.equal(postRes.code, 200);
     assert.equal(postRes.body.ok, true);
-    assert.match(requestedUrl, /\/eval$/);
-    assert.equal(command[1], "1");
-    assert.equal(command[2], "quant-pro:xauusd:manual-journal:v1");
-    assert.equal(command[3], "open");
-    assert.equal(command[5], "");
+    assert.equal(requestedUrl, "https://redis.example.test");
+    assert.equal(command[0], "EVAL");
+    assert.equal(command[2], "1");
+    assert.equal(command[3], "quant-pro:xauusd:manual-journal:v1");
+    assert.equal(command[4], "open");
     assert.equal(command[6], "");
-    assert.equal(command[7], "500");
+    assert.equal(command[7], "");
+    assert.equal(command[8], "500");
   } finally {
     global.fetch = originalFetch;
     if (saved.access === undefined) delete process.env.JOURNAL_ACCESS_TOKEN;
