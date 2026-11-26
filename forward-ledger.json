@@ -3,14 +3,8 @@
   "symbol": "XAUUSD",
   "timeframe": "H1 + COMPLETED H4",
   "startTime": "2026-11-26T20:00:00.000Z",
-  "lastCheckedAt": "2026-11-26T21:27:17.259Z",
-  "lastError": {
-    "at": "2026-11-26T21:27:17.259Z",
-    "httpStatus": 200,
-    "error": "INVALID_OR_INCOMPLETE_FORWARD_RESPONSE",
-    "message": "Forward API yanıtı eksik veya beklenen iki maliyet senaryosuyla uyuşmuyor.",
-    "historyStatus": "START_AND_INDICATOR_HISTORY_AVAILABLE"
-  },
+  "lastCheckedAt": "2026-11-26T21:27:39.055Z",
+  "lastError": null,
   "checks": [
     {
       "checkedAt": "2026-11-26T21:14:37.669Z",
@@ -111,6 +105,50 @@
       "ok": false,
       "error": "INVALID_OR_INCOMPLETE_FORWARD_RESPONSE",
       "httpStatus": 200
+    },
+    {
+      "checkedAt": "2026-11-26T21:27:39.055Z",
+      "ok": true,
+      "forwardCandleCount": 1,
+      "warmupComplete": true,
+      "results": [
+        {
+          "slippagePerSideUSD": 0.1,
+          "status": "COLLECTING_MINIMUM_30_CLOSED_TRADES",
+          "closedTradeMetrics": {
+            "tradeCount": 0,
+            "winCount": 0,
+            "lossCount": 0,
+            "winRatePercent": null,
+            "profitFactor": null,
+            "netProfitR": 0,
+            "maxDrawdownR": 0,
+            "averageR": null,
+            "grossWinR": 0,
+            "grossLossR": 0,
+            "insufficientSample": true
+          },
+          "openTrade": null
+        },
+        {
+          "slippagePerSideUSD": 0.2,
+          "status": "COLLECTING_MINIMUM_30_CLOSED_TRADES",
+          "closedTradeMetrics": {
+            "tradeCount": 0,
+            "winCount": 0,
+            "lossCount": 0,
+            "winRatePercent": null,
+            "profitFactor": null,
+            "netProfitR": 0,
+            "maxDrawdownR": 0,
+            "averageR": null,
+            "grossWinR": 0,
+            "grossLossR": 0,
+            "insufficientSample": true
+          },
+          "openTrade": null
+        }
+      ]
     }
   ],
   "trades": []
