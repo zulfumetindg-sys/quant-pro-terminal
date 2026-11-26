@@ -565,3 +565,80 @@ test("manual journal API fails closed without authentication or Redis configurat
     else process.env.KV_REST_API_TOKEN = originalRedisToken;
   }
 });
+
+test("manual journal API reads Redis and sends an authenticated atomic open command", async () => {
+  const handler = require("../api/manual-journal.js");
+  const originalFetch = global.fetch;
+  const saved = {
+    access: process.env.JOURNAL_ACCESS_TOKEN,
+    url: process.env.KV_REST_API_URL,
+    redis: process.env.KV_REST_API_TOKEN
+  };
+  const token = "journal-test-token-".padEnd(64, "x");
+  let requestedUrl = "";
+  let command = null;
+  const response = (result) => ({ ok: true, status: 200, json: async () => ({ result }) });
+  const makeRes = () => ({
+    code: 200, body: null, headers: {},
+    setHeader(name, value) { this.headers[name] = value; },
+    status(code) { this.code = code; return this; },
+    json(body) { this.body = body; return this; }
+  });
+
+  try {
+    process.env.JOURNAL_ACCESS_TOKEN = token;
+    process.env.KV_REST_API_URL = "https://redis.example.test";
+    process.env.KV_REST_API_TOKEN = "redis-secret";
+    global.fetch = async (url, options = {}) => {
+      requestedUrl = String(url);
+      if (options.method === "GET") return response(null);
+      command = JSON.parse(options.body);
+      const incoming = JSON.parse(command[4]);
+      return response(JSON.stringify({
+        ok: true,
+        state: { trades: [incoming], activeTradeId: incoming.tradeId }
+      }));
+    };
+
+    const getRes = makeRes();
+    await handler({ method: "GET", headers: { authorization: "Bearer " + token } }, getRes);
+    assert.equal(getRes.code, 200);
+    assert.deepEqual(getRes.body.state, { trades: [], activeTradeId: "" });
+    assert.match(requestedUrl, /\/get\//);
+
+    const candleClosedAt = Date.now() - 30 * 60000;
+    const signal = {
+      symbol: "XAUUSD",
+      status: "BUY",
+      signalId: "XAUUSD:BUY:" + candleClosedAt,
+      signalCandleClosedAt: new Date(candleClosedAt).toISOString(),
+      signalValidUntil: new Date(candleClosedAt + 3600000).toISOString(),
+      entry: 2650,
+      sl: 2640,
+      tp: 2670
+    };
+    const postRes = makeRes();
+    await handler({
+      method: "POST",
+      headers: { authorization: "Bearer " + token },
+      body: { action: "open", signal, fillPrice: 2650 }
+    }, postRes);
+    assert.equal(postRes.code, 200);
+    assert.equal(postRes.body.ok, true);
+    assert.match(requestedUrl, /\/eval$/);
+    assert.equal(command[1], "1");
+    assert.equal(command[2], "quant-pro:xauusd:manual-journal:v1");
+    assert.equal(command[3], "open");
+    assert.equal(command[5], "");
+    assert.equal(command[6], "");
+    assert.equal(command[7], "500");
+  } finally {
+    global.fetch = originalFetch;
+    if (saved.access === undefined) delete process.env.JOURNAL_ACCESS_TOKEN;
+    else process.env.JOURNAL_ACCESS_TOKEN = saved.access;
+    if (saved.url === undefined) delete process.env.KV_REST_API_URL;
+    else process.env.KV_REST_API_URL = saved.url;
+    if (saved.redis === undefined) delete process.env.KV_REST_API_TOKEN;
+    else process.env.KV_REST_API_TOKEN = saved.redis;
+  }
+});
