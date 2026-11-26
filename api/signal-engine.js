@@ -325,10 +325,17 @@ function createSignal(candles, h4Candles, currentPrice) {
     ? currentPrice + reward
     : currentPrice - reward;
 
+  const signalCandleTime = candles[candles.length - 1].time + 3600000;
+  const signalCandleClosedAt = new Date(signalCandleTime).toISOString();
+  const signalId = `XAUUSD:${side}:${signalCandleTime}`;
+
   return {
     ...base,
     ...entryFields,
     status: side,
+    signalId,
+    signalCandleClosedAt,
+    signalValidUntil: new Date(signalCandleTime + 3600000).toISOString(),
     h1Trend: h1.trend,
     h4Trend: h4.trend,
     macdHistogram: Number(histogram.toFixed(5)),
