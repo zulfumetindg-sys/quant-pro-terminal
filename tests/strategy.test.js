@@ -527,3 +527,41 @@ test("manual journal Redis mutation arguments preserve atomic Lua parameter posi
   assert.deepEqual(closeArgs, ["close", "2660", "2026-11-26T22:00:00.000Z", "11111111-1111-4111-8111-111111111111", "500"]);
   assert.throws(() => journal.buildMutationArguments("delete", []), /ACTION_INVALID/);
 });
+
+test("manual journal API fails closed without authentication or Redis configuration", async () => {
+  const handler = require("../api/manual-journal.js");
+  const response = () => ({
+    code: 200,
+    headers: {},
+    body: null,
+    setHeader(name, value) { this.headers[name] = value; },
+    status(code) { this.code = code; return this; },
+    json(body) { this.body = body; return this; }
+  });
+
+  const originalAccess = process.env.JOURNAL_ACCESS_TOKEN;
+  const originalUrl = process.env.KV_REST_API_URL;
+  const originalRedisToken = process.env.KV_REST_API_TOKEN;
+  try {
+    delete process.env.JOURNAL_ACCESS_TOKEN;
+    delete process.env.KV_REST_API_URL;
+    delete process.env.KV_REST_API_TOKEN;
+    const unauthorized = response();
+    await handler({ method: "GET", headers: {} }, unauthorized);
+    assert.equal(unauthorized.code, 401);
+    assert.equal(unauthorized.body.error, "UNAUTHORIZED");
+
+    process.env.JOURNAL_ACCESS_TOKEN = "x".repeat(64);
+    const notConfigured = response();
+    await handler({ method: "GET", headers: { authorization: "Bearer " + process.env.JOURNAL_ACCESS_TOKEN } }, notConfigured);
+    assert.equal(notConfigured.code, 503);
+    assert.equal(notConfigured.body.error, "JOURNAL_STORAGE_NOT_CONFIGURED");
+  } finally {
+    if (originalAccess === undefined) delete process.env.JOURNAL_ACCESS_TOKEN;
+    else process.env.JOURNAL_ACCESS_TOKEN = originalAccess;
+    if (originalUrl === undefined) delete process.env.KV_REST_API_URL;
+    else process.env.KV_REST_API_URL = originalUrl;
+    if (originalRedisToken === undefined) delete process.env.KV_REST_API_TOKEN;
+    else process.env.KV_REST_API_TOKEN = originalRedisToken;
+  }
+});
