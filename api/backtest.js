@@ -222,24 +222,29 @@ function getSignal(candles, h4, indicators, i, h4Index) {
 
 function calculateTrade(candles, i, signal, slippage, maxIndex, forceCloseAtEnd) {
   const halfSpread = SPREAD_USD / 2;
-  const { side, atr, reference } = signal;
+  const { side, atr } = signal;
 
+  // Signal is confirmed at candle i close; execution is modeled at
+  // the next H1 candle open to avoid same-close execution lookahead.
+  const executionReference = candles[i + 1].open;
   const riskDistance = Math.max(
     atr * STOP_ATR,
-    Math.abs(reference) * 0.001
+    Math.abs(executionReference) * 0.001
   );
 
   const entry = side === "BUY"
-    ? reference + halfSpread + slippage
-    : reference - halfSpread - slippage;
+    ? executionReference + halfSpread + slippage
+    : executionReference - halfSpread - slippage;
 
+  // Define SL/TP from the actual cost-adjusted entry so 1R is the
+  // true entry-to-stop distance, not the pre-cost signal reference.
   const sl = side === "BUY"
-    ? reference - riskDistance
-    : reference + riskDistance;
+    ? entry - riskDistance
+    : entry + riskDistance;
 
   const tp = side === "BUY"
-    ? reference + riskDistance * TARGET_R
-    : reference - riskDistance * TARGET_R;
+    ? entry + riskDistance * TARGET_R
+    : entry - riskDistance * TARGET_R;
 
   const maxHoldTime =
     candles[i].time + 3600000 + MAX_HOLD_HOURS * 3600000;
@@ -283,7 +288,7 @@ function calculateTrade(candles, i, signal, slippage, maxIndex, forceCloseAtEnd)
     return {
       side,
       signalTime: new Date(candles[i].time + 3600000).toISOString(),
-      entryReference: reference,
+      entryReference: executionReference,
       entry,
       stopLoss: sl,
       takeProfit: tp,
@@ -304,7 +309,7 @@ function calculateTrade(candles, i, signal, slippage, maxIndex, forceCloseAtEnd)
     open: true,
     side,
     signalTime: new Date(candles[i].time + 3600000).toISOString(),
-    entryReference: reference,
+    entryReference: executionReference,
     entry,
     stopLoss: sl,
     takeProfit: tp,
@@ -376,7 +381,7 @@ function runBacktest(candles, h4, indicators, slippage, period) {
     period: period.name,
     spreadUSD: SPREAD_USD,
     slippagePerSideUSD: slippage,
-    entryReference: "LAST_COMPLETED_H1_CLOSE",
+    entryReference: "NEXT_H1_OPEN_AFTER_SIGNAL",
     stopATR: STOP_ATR,
     targetR: TARGET_R,
     metrics: getMetrics(trades),
@@ -620,7 +625,8 @@ module.exports = async function handler(req, res) {
         adxFilter: false,
         stopLoss: "ATR14 x 1.5",
         takeProfit: "2.0R",
-        entry: "LAST COMPLETED H1 CLOSE",
+        signalReference: "LAST_COMPLETED_H1_CLOSE",
+        entry: "NEXT_H1_OPEN_AFTER_SIGNAL",
         maxHoldingHours: MAX_HOLD_HOURS
       },
       costModel: {
