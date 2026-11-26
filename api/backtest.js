@@ -416,8 +416,33 @@ function runBacktest(candles, h4, indicators, slippage, period) {
 }
 
 function hasForwardWarmup(candles, forwardStart) {
-  return candles.length > 0 &&
-    candles[0].time <= forwardStart - 100 * 3600000;
+  // EMA20 on H4 needs a materially longer warmup than 100 H1 hours.
+  // Use at least 5x the slowest EMA period (100 completed H4 bars),
+  // and at least 400 completed H1 bars before the forward boundary.
+  const history = candles.filter(c => c.time + 3600000 <= forwardStart);
+  if (history.length < 400) return false;
+
+  const h1Warmup = history.slice(-400);
+  const maxGapMs = 72 * 3600000;
+
+  if (h1Warmup[h1Warmup.length - 1].time + 3600000 <
+      forwardStart - maxGapMs) return false;
+
+  for (let i = 1; i < h1Warmup.length; i++) {
+    if (h1Warmup[i].time - h1Warmup[i - 1].time > maxGapMs) return false;
+  }
+
+  const h4Warmup = makeH4(history).slice(-100);
+  if (h4Warmup.length < 100) return false;
+
+  if (h4Warmup[h4Warmup.length - 1].end <
+      forwardStart - maxGapMs) return false;
+
+  for (let i = 1; i < h4Warmup.length; i++) {
+    if (h4Warmup[i].time - h4Warmup[i - 1].time > maxGapMs) return false;
+  }
+
+  return true;
 }
 
 function runForwardTest(candles, h4, indicators, slippage) {
@@ -593,11 +618,11 @@ module.exports = async function handler(req, res) {
           symbol: SYMBOL,
           startTime: new Date(FORWARD_START).toISOString(),
           firstAvailableCandle: new Date(candles[0].time).toISOString(),
-          requiredHistoryStart: new Date(FORWARD_START - 100 * 3600000).toISOString(),
+          requiredHistory: { minimumCompletedH1Candles: 400, minimumCompletedH4Candles: 100, maximumGapHours: 72 },
           historyStatus: "HISTORY_MAY_BE_TRUNCATED",
           persistence: "NOT_STORED_PERMANENTLY",
           executionStatus: "RESEARCH_ONLY_NOT_TRADE_READY",
-          warning: "Başlangıç öncesi 100 saatlik ısınma verisi sağlayıcının geçmiş mum sınırı içinde bulunamadı. Yanıltıcı ileri test sonucu üretilmedi."
+          warning: "İleri test için gereken 400 tamamlanmış H1 ve 100 tamamlanmış H4 ısınma mumu veya kesintisiz geçmiş bulunamadı. Yanıltıcı ileri test sonucu üretilmedi."
         });
       }
 
