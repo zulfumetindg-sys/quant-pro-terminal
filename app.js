@@ -20,7 +20,7 @@ function render(){
  }).join("");
 }
 function notice(type,title,message){const n=document.getElementById("connectionNotice");n.className="notice "+(type||"");document.getElementById("connectionTitle").textContent=title;document.getElementById("connectionText").textContent=message;}
-function fmt(v){return Number.isFinite(Number(v))?Number(v).toFixed(2):"—";}
+function fmt(v){return v!==null&&v!==undefined&&v!==""&&Number.isFinite(Number(v))?Number(v).toFixed(2):"—";}
 function renderSignal(s){
  const box=document.getElementById("goldSignal");
  if(!s){box.innerHTML='<p class="signal-muted">Sinyal verisi henüz alınmadı.</p>';return;}
