@@ -215,6 +215,126 @@ async function loadBacktest() {
     button.textContent = "Tarihsel geri testi çalıştır";
   }
 }
+
+let journalToken = "";
+let journalState = { trades: [], activeTradeId: "" };
+try { journalToken = sessionStorage.getItem("quantProJournalToken") || ""; } catch (_) {}
+
+function journalRequest(method, body) {
+  if (!journalToken) throw new Error("Önce güvenli kayıt anahtarını gir.");
+  return fetchWithTimeout("/api/manual-journal", {
+    method,
+    cache: "no-store",
+    headers: { Authorization: "Bearer " + journalToken, ...(body ? { "Content-Type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined
+  }, 15000).then(async response => {
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) {
+      const messages = {
+        JOURNAL_STORAGE_NOT_CONFIGURED: "Sunucu veritabanı henüz yapılandırılmadı.",
+        ACTIVE_TRADE_EXISTS: "Önce açık işlemi kapatmalısın.",
+        SIGNAL_ALREADY_RECORDED: "Bu sinyal daha önce kaydedildi; tekrar açılamaz.",
+        SIGNAL_EXPIRED_OR_INVALID: "Sinyalin süresi dolmuş veya geçerliliği doğrulanamıyor.",
+        ACTUAL_FILL_RR_BELOW_1_8: "Gerçekleşen giriş fiyatında R:R 1:1,8 altında.",
+        FILL_PRICE_OUTSIDE_RISK_LEVELS: "Giriş fiyatı SL/TP seviyelerinin dışında.",
+        UNAUTHORIZED: "Kayıt anahtarı geçersiz."
+      };
+      throw new Error(messages[payload.error] || payload.error || "Kayıt isteği başarısız.");
+    }
+    return payload;
+  });
+}
+
+function renderManualJournal() {
+  const active = journalState.trades.find(x => x.tradeId === journalState.activeTradeId && x.status === "OPEN");
+  $("journalOpenBtn").disabled = !journalToken || !latestSignal || !["BUY", "SELL"].includes(latestSignal.status);
+  $("journalCloseBtn").disabled = !journalToken || !active;
+  $("journalActive").innerHTML = active
+    ? '<h3>Açık manuel işlem</h3><div class="journal-row"><b>' + esc(active.side) + ' · XAUUSD</b><span>Gerçek giriş: ' + esc(fmt(active.fillPrice)) + '</span><span>SL: ' + esc(fmt(active.stopLoss)) + '</span><span>TP: ' + esc(fmt(active.takeProfit)) + '</span><span>R:R: 1:' + esc(active.actualFillRiskReward) + '</span><span>Açılış: ' + esc(active.openedAt) + '</span></div>'
+    : '<h3>Açık manuel işlem yok</h3><p>Yeni kayıt için geçerli AL/SAT sinyali beklenir.</p>';
+
+  const history = [...journalState.trades].reverse();
+  $("journalHistory").innerHTML = '<h3>Son manuel işlemler (' + history.length + ')</h3>' +
+    (history.length ? history.slice(0, 30).map(trade =>
+      '<div class="journal-row"><b>' + esc(trade.side) + ' · ' + esc(trade.status) + '</b>' +
+      '<span>Giriş: ' + esc(fmt(trade.fillPrice)) + '</span>' +
+      '<span>Çıkış: ' + esc(trade.exitPrice == null ? "—" : fmt(trade.exitPrice)) + '</span>' +
+      '<span>Sonuç: ' + esc(trade.realizedR == null ? "Açık" : trade.realizedR + "R") + '</span>' +
+      '<span>Başlangıç R:R: 1:' + esc(trade.actualFillRiskReward) + '</span></div>'
+    ).join("") : '<p>Henüz kayıtlı manuel işlem yok.</p>');
+}
+
+async function loadManualJournal() {
+  try {
+    const payload = await journalRequest("GET");
+    journalState = payload.state || { trades: [], activeTradeId: "" };
+    renderManualJournal();
+    $("journalStatus").textContent = "Güvenli veritabanına bağlandı · " + journalState.trades.length + " kayıt · sunucu tarafında saklanıyor.";
+    $("journalStatus").className = "journal-status ok";
+  } catch (error) {
+    $("journalStatus").textContent = error.message;
+    $("journalStatus").className = "journal-status bad";
+  }
+}
+
+async function connectManualJournal() {
+  const entered = $("journalToken").value.trim();
+  if (entered.length >= 32) {
+    journalToken = entered;
+    try { sessionStorage.setItem("quantProJournalToken", journalToken); } catch (_) {}
+  } else if (!journalToken) {
+    $("journalStatus").textContent = "En az 32 karakterli sunucu kayıt anahtarını gir.";
+    $("journalStatus").className = "journal-status bad";
+    return;
+  }
+  await loadManualJournal();
+}
+
+async function recordManualOpen() {
+  const fillPrice = Number($("journalFillPrice").value);
+  if (!latestSignal || !["BUY", "SELL"].includes(latestSignal.status)) {
+    $("journalStatus").textContent = "Kayıt için geçerli AL/SAT sinyali yok.";
+    $("journalStatus").className = "journal-status bad";
+    return;
+  }
+  try {
+    const payload = await journalRequest("POST", { action: "open", signal: latestSignal, fillPrice });
+    journalState = payload.state;
+    $("journalFillPrice").value = "";
+    $("journalStatus").textContent = "Manuel açılış kaydı sunucuya kaydedildi.";
+    $("journalStatus").className = "journal-status ok";
+    renderManualJournal();
+  } catch (error) {
+    $("journalStatus").textContent = error.message;
+    $("journalStatus").className = "journal-status bad";
+  }
+}
+
+async function recordManualClose() {
+  const active = journalState.trades.find(x => x.tradeId === journalState.activeTradeId && x.status === "OPEN");
+  const exitPrice = Number($("journalExitPrice").value);
+  if (!active) return;
+  try {
+    const payload = await journalRequest("POST", { action: "close", tradeId: active.tradeId, exitPrice });
+    journalState = payload.state;
+    $("journalExitPrice").value = "";
+    $("journalStatus").textContent = "Manuel kapanış kaydı sunucuya kaydedildi. Maliyetler dahil değildir.";
+    $("journalStatus").className = "journal-status ok";
+    renderManualJournal();
+  } catch (error) {
+    $("journalStatus").textContent = error.message;
+    $("journalStatus").className = "journal-status bad";
+  }
+}
+
+$("journalConnectBtn").addEventListener("click", connectManualJournal);
+$("journalOpenBtn").addEventListener("click", recordManualOpen);
+$("journalCloseBtn").addEventListener("click", recordManualClose);
+if (journalToken) {
+  $("journalToken").value = journalToken;
+  loadManualJournal();
+}
+
 $("refreshBtn").addEventListener("click", () => loadSignal());
 $("backtestBtn").addEventListener("click", loadBacktest);
 $("aiAnalyzeBtn").addEventListener("click", loadFreeAnalysis);
