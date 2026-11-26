@@ -1,4 +1,6 @@
 
+const { measureVolatilityShock } = require("./volatility");
+
 const SYMBOL = "XAU/USD";
 const STOP_ATR = 1.5;
 const TARGET_R = 2.0;
@@ -231,6 +233,7 @@ function getSignal(candles, h4, indicators, i, h4Index) {
   return {
     side: h1Trend,
     atr,
+    volatilityShock: measureVolatilityShock(candles, i),
     reference: candles[i].close,
     entryDistancePercent
   };
@@ -313,6 +316,7 @@ function calculateTrade(candles, i, signal, slippage, maxIndex, forceCloseAtEnd)
 
     return {
       side,
+      volatilityShock: signal.volatilityShock || null,
       signalTime: new Date(candles[i].time + 3600000).toISOString(),
       entryReference: executionReference,
       entry,
@@ -334,6 +338,7 @@ function calculateTrade(candles, i, signal, slippage, maxIndex, forceCloseAtEnd)
   return {
     open: true,
     side,
+    volatilityShock: signal.volatilityShock || null,
     signalTime: new Date(candles[i].time + 3600000).toISOString(),
     entryReference: executionReference,
     entry,
@@ -345,6 +350,24 @@ function calculateTrade(candles, i, signal, slippage, maxIndex, forceCloseAtEnd)
       riskDistance
     ).toFixed(3),
     status: "OPEN_NOT_COUNTED"
+  };
+}
+
+function summarizeVolatilityDiagnostics(trades) {
+  const values = trades
+    .map(trade => trade?.volatilityShock?.ratio)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  const percentile = p => values.length
+    ? values[Math.min(values.length - 1, Math.ceil(p * values.length) - 1)]
+    : null;
+  return {
+    sampleCount: values.length,
+    medianRatio: percentile(0.50),
+    p75Ratio: percentile(0.75),
+    p90Ratio: percentile(0.90),
+    maximumRatio: values.length ? values[values.length - 1] : null,
+    interpretation: "DIAGNOSTIC_ONLY_NO_VOLATILITY_BLOCKING_THRESHOLD"
   };
 }
 
@@ -415,6 +438,7 @@ function runBacktest(candles, h4, indicators, slippage, period) {
     stopATR: STOP_ATR,
     targetR: TARGET_R,
     metrics: getMetrics(trades),
+    volatilityDiagnostics: summarizeVolatilityDiagnostics([...trades, openTrade]),
     openTrade,
     lastTrades: trades.slice(-10)
   };
@@ -518,6 +542,7 @@ function runForwardTest(candles, h4, indicators, slippage) {
     slippagePerSideUSD: slippage,
     strategy: "V9_UNCHANGED",
     closedTradeMetrics: getMetrics(trades),
+    volatilityDiagnostics: summarizeVolatilityDiagnostics([...trades, openTrade]),
     openTrade,
     closedTrades: trades,
     lastClosedTrades: trades.slice(-10),
@@ -778,6 +803,6 @@ module.exports = async function handler(req, res) {
 // Export pure strategy functions for the Node test runner. The default export remains the Vercel handler.
 module.exports.__test = {
   parseTime, emaSeries, ema, makeH4, trend, buildIndicators,
-  getMetrics, getSignal, calculateTrade, runBacktest, runForwardTest,
+  getMetrics, getSignal, calculateTrade, runBacktest, runForwardTest, summarizeVolatilityDiagnostics,
   hasForwardWarmup, hasForwardContinuity
 };
