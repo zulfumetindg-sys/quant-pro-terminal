@@ -235,7 +235,9 @@ function createSignal(candles, h4Candles, currentPrice) {
   const h1 = analyzeTrend(candles, 20, 50);
   const h4 = analyzeTrend(h4Candles, 8, 20);
 
+  const volatilityShock = measureVolatilityShock(candles);
   const base = {
+    volatilityShock,
     executionStatus: "RESEARCH_ONLY_NOT_TRADE_READY",
     maxRiskPercent: 0.5,
     historicalWinProbability: "UNAVAILABLE",
@@ -328,7 +330,6 @@ function createSignal(candles, h4Candles, currentPrice) {
   }
 
   const side = h1.trend;
-  const volatilityShock = measureVolatilityShock(candles);
   const risk = Math.max(
     atr * STOP_ATR,
     Math.abs(currentPrice) * 0.001
