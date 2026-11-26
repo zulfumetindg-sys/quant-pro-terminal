@@ -21,10 +21,11 @@ function validateOpenPayload(body, now = Date.now()) {
   const expiry = Date.parse(signal.signalValidUntil || "");
   if (!Number.isFinite(expiry) || expiry <= now) return { ok: false, error: "SIGNAL_EXPIRED_OR_INVALID" };
 
+  const signalEntry = Number(signal.entry);
   const fillPrice = Number(body.fillPrice);
   const stopLoss = Number(signal.sl);
   const takeProfit = Number(signal.tp);
-  if (![fillPrice, stopLoss, takeProfit].every(Number.isFinite) ||
+  if (![signalEntry, fillPrice, stopLoss, takeProfit].every(Number.isFinite) ||
       fillPrice <= 0 || stopLoss <= 0 || takeProfit <= 0) {
     return { ok: false, error: "PRICE_FIELDS_INVALID" };
   }
@@ -49,7 +50,7 @@ function validateOpenPayload(body, now = Date.now()) {
       signalId: signal.signalId,
       symbol: "XAUUSD",
       side,
-      signalEntry: Number(signal.entry),
+      signalEntry,
       fillPrice,
       stopLoss,
       takeProfit,
@@ -219,10 +220,6 @@ module.exports = async function handler(req, res) {
         String(validated.exitPrice),
         validated.closedAt
       ], process.env);
-      if (result.ok) {
-        const closed = result.state.trades.find(x => x.tradeId === result.state.trades.find(y => y.status === "CLOSED" && y.closedAt === validated.closedAt)?.tradeId);
-        if (closed) closed.costs = "NOT_INCLUDED";
-      }
       return res.status(result.ok ? 200 : 409).json(result);
     }
     return res.status(400).json({ ok: false, error: "ACTION_INVALID" });
