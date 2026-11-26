@@ -1,4 +1,4 @@
-const CACHE="quant-pro-v0-3";
+const CACHE="quant-pro-v0-4";
 const ASSETS=["./","./index.html","./styles.css","./app.js","./manifest.webmanifest","./icon.svg"];
 self.addEventListener("install",event=>event.waitUntil((async()=>{
  const cache=await caches.open(CACHE);
