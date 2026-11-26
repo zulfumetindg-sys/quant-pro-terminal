@@ -1,11 +1,12 @@
-
 const SYMBOL = "XAU/USD";
 const MARKET = "XAUUSD";
+
+const STOP_ATR = 1.5;
+const TARGET_R = 2.0;
 
 function parseTime(value) {
   let s = String(value || "").trim();
 
-  // Twelve Data UTC zamanını açıkça UTC olarak yorumla.
   if (!/[zZ]|[+-]\d{2}:\d{2}$/.test(s)) {
     s = s.replace(" ", "T") + "Z";
   }
@@ -16,53 +17,68 @@ function parseTime(value) {
 function normalizeCandles(values) {
   const now = Date.now();
 
-  return values
-    .map(c => {
-      const time = parseTime(c.datetime);
+  return values.map(c => {
+    const time = parseTime(c.datetime);
 
-      return {
-        time,
-        datetime: Number.isFinite(time)
-          ? new Date(time).toISOString()
-          : null,
-        open: Number(c.open),
-        high: Number(c.high),
-        low: Number(c.low),
-        close: Number(c.close)
-      };
-    })
-    .filter(c =>
-      Number.isFinite(c.time) &&
-      c.time + 3600000 <= now &&
-      Number.isFinite(c.open) &&
-      Number.isFinite(c.high) &&
-      Number.isFinite(c.low) &&
-      Number.isFinite(c.close) &&
-      c.high >= c.low
-    )
-    .sort((a, b) => a.time - b.time);
+    return {
+      time,
+      datetime: Number.isFinite(time)
+        ? new Date(time).toISOString()
+        : null,
+      open: Number(c.open),
+      high: Number(c.high),
+      low: Number(c.low),
+      close: Number(c.close)
+    };
+  }).filter(c =>
+    Number.isFinite(c.time) &&
+    c.time + 3600000 <= now &&
+    [c.open, c.high, c.low, c.close].every(Number.isFinite) &&
+    c.high >= c.low
+  ).sort((a, b) => a.time - b.time);
+}
+
+function emaSeries(values, period) {
+  const out = Array(values.length).fill(null);
+
+  if (values.length < period) return out;
+
+  let v = values.slice(0, period)
+    .reduce((a, b) => a + b, 0) / period;
+
+  out[period - 1] = v;
+
+  const k = 2 / (period + 1);
+
+  for (let i = period; i < values.length; i++) {
+    v = values[i] * k + v * (1 - k);
+    out[i] = v;
+  }
+
+  return out;
 }
 
 function ema(values, period) {
   if (values.length < period) return null;
 
-  let result =
-    values.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  let v = values.slice(0, period)
+    .reduce((a, b) => a + b, 0) / period;
 
   const k = 2 / (period + 1);
 
   for (let i = period; i < values.length; i++) {
-    result = values[i] * k + result * (1 - k);
+    v = values[i] * k + v * (1 - k);
   }
 
-  return result;
+  return v;
 }
 
 function aggregateH4(candles) {
   const groups = new Map();
 
   for (const c of candles) {
-    const bucket = Math.floor(c.time / 14400000) * 14400000;
+    const bucket =
+      Math.floor(c.time / 14400000) * 14400000;
 
     if (!groups.has(bucket)) groups.set(bucket, []);
     groups.get(bucket).push(c);
@@ -94,40 +110,48 @@ function aggregateH4(candles) {
     }));
 }
 
-function analyze(candles, timeframe) {
-  const closes = candles.map(c => c.close);
+function calculateMACDHistogram(candles) {
+  const close = candles.map(c => c.close);
 
-  const fastPeriod = timeframe === "H1" ? 20 : 8;
-  const slowPeriod = timeframe === "H1" ? 50 : 20;
+  const e12 = emaSeries(close, 12);
+  const e26 = emaSeries(close, 26);
 
-  if (closes.length < slowPeriod + 1) {
-    return {
-      valid: false,
-      reason: "INSUFFICIENT_COMPLETED_CANDLES",
-      candleCount: candles.length
-    };
+  const macd = close.map((_, i) =>
+    e12[i] === null || e26[i] === null
+      ? null
+      : e12[i] - e26[i]
+  );
+
+  const signal = Array(close.length).fill(null);
+
+  const firstMacd = 25;
+  const firstSignal = firstMacd + 8;
+
+  if (close.length > firstSignal) {
+    let value = 0;
+
+    for (let i = firstMacd; i <= firstSignal; i++) {
+      value += macd[i];
+    }
+
+    value /= 9;
+    signal[firstSignal] = value;
+
+    const k = 2 / 10;
+
+    for (let i = firstSignal + 1; i < close.length; i++) {
+      value = macd[i] * k + value * (1 - k);
+      signal[i] = value;
+    }
   }
 
-  const fast = ema(closes, fastPeriod);
-  const slow = ema(closes, slowPeriod);
+  const histogram = macd.map((value, i) =>
+    value === null || signal[i] === null
+      ? null
+      : value - signal[i]
+  );
 
-  if (fast === null || slow === null) {
-    return {
-      valid: false,
-      reason: "EMA_UNAVAILABLE"
-    };
-  }
-
-  return {
-    valid: true,
-    timeframe,
-    trend: fast > slow ? "BUY" : fast < slow ? "SELL" : "WAIT",
-    fast,
-    slow,
-    price: closes[closes.length - 1],
-    candleCount: candles.length,
-    lastCompletedCandle: candles[candles.length - 1].datetime
-  };
+  return histogram[histogram.length - 1];
 }
 
 function calculateATR(candles, period = 14) {
@@ -151,52 +175,104 @@ function calculateATR(candles, period = 14) {
   return recent.reduce((a, b) => a + b, 0) / period;
 }
 
-function createSignal(h1, h4, candles, currentPrice) {
-  const hasQuote =
-    Number.isFinite(currentPrice) && currentPrice > 0;
+function analyzeTrend(candles, fastPeriod, slowPeriod) {
+  if (candles.length < slowPeriod) {
+    return {
+      valid: false,
+      trend: "WAIT",
+      reason: "INSUFFICIENT_CANDLES"
+    };
+  }
+
+  const close = candles.map(c => c.close);
+
+  const fast = ema(close, fastPeriod);
+  const slow = ema(close, slowPeriod);
+
+  if (fast === null || slow === null) {
+    return {
+      valid: false,
+      trend: "WAIT",
+      reason: "EMA_UNAVAILABLE"
+    };
+  }
+
+  return {
+    valid: true,
+    trend: fast > slow ? "BUY" : fast < slow ? "SELL" : "WAIT",
+    fast,
+    slow,
+    price: close[close.length - 1],
+    candleCount: candles.length,
+    lastCompletedCandle:
+      candles[candles.length - 1].datetime
+  };
+}
+
+function createSignal(candles, h4Candles, currentPrice) {
+  const h1 = analyzeTrend(candles, 20, 50);
+  const h4 = analyzeTrend(h4Candles, 8, 20);
 
   const base = {
-    executionStatus: "NOT_TRADE_READY",
-    executionBlockReason: "BACKTEST_AND_XM_SPREAD_VALIDATION_PENDING",
-    historicalWinProbability: "UNAVAILABLE",
-    backtestStatus: "NOT_VALIDATED_FOR_LIVE_EXECUTION",
-    timeframeConfirmation: "H1+H4",
+    executionStatus: "RESEARCH_ONLY_NOT_TRADE_READY",
     maxRiskPercent: 0.5,
-    currentPrice: hasQuote ? currentPrice : null,
-    liveQuoteStatus: hasQuote ? "OK" : "UNAVAILABLE"
+    historicalWinProbability: "UNAVAILABLE",
+    backtestStatus: "NOT_INDEPENDENTLY_VALIDATED",
+    timeframe: "H1 + COMPLETED H4",
+    currentPrice,
+    liveQuoteStatus: Number.isFinite(currentPrice)
+      ? "OK"
+      : "UNAVAILABLE"
   };
 
   if (!h1.valid || !h4.valid) {
     return {
       ...base,
       status: "WAIT",
-      reason: "INSUFFICIENT_COMPLETED_H1_H4_DATA"
+      reason: "INSUFFICIENT_H1_H4_DATA"
     };
   }
 
   const entry = h1.price;
 
-  const distance = hasQuote
+  const distance = Number.isFinite(currentPrice)
     ? Math.abs(currentPrice - entry) / Math.abs(entry) * 100
     : null;
 
-  const distanceFields = {
+  const entryFields = {
     entry,
-    entryReference: "LAST_COMPLETED_H1_CANDLE_CLOSE",
-    entryDistancePercent:
-      distance === null ? null : Number(distance.toFixed(4)),
-    entryDistanceStatus:
-      distance === null ? "UNAVAILABLE" : "AVAILABLE"
+    entryReference: "LAST_COMPLETED_H1_CLOSE",
+    entryDistancePercent: distance === null
+      ? null
+      : Number(distance.toFixed(4))
   };
 
   if (h1.trend === "WAIT" || h1.trend !== h4.trend) {
     return {
       ...base,
-      ...distanceFields,
+      ...entryFields,
       status: "WAIT",
       reason: "H1_H4_NOT_ALIGNED",
       h1Trend: h1.trend,
       h4Trend: h4.trend
+    };
+  }
+
+  const histogram = calculateMACDHistogram(candles);
+
+  if (
+    histogram === null ||
+    (h1.trend === "BUY" && histogram <= 0) ||
+    (h1.trend === "SELL" && histogram >= 0)
+  ) {
+    return {
+      ...base,
+      ...entryFields,
+      status: "WAIT",
+      reason: "MACD_HISTOGRAM_NOT_CONFIRMED",
+      h1Trend: h1.trend,
+      h4Trend: h4.trend,
+      macdHistogram: histogram
     };
   }
 
@@ -205,15 +281,20 @@ function createSignal(h1, h4, candles, currentPrice) {
   if (!atr || !Number.isFinite(atr)) {
     return {
       ...base,
-      ...distanceFields,
+      ...entryFields,
       status: "WAIT",
       reason: "ATR_UNAVAILABLE"
     };
   }
 
   const side = h1.trend;
-  const risk = Math.max(atr * 1.5, Math.abs(entry) * 0.001);
-  const reward = risk * 1.8;
+
+  const risk = Math.max(
+    atr * STOP_ATR,
+    Math.abs(entry) * 0.001
+  );
+
+  const reward = risk * TARGET_R;
 
   const sl = side === "BUY"
     ? entry - risk
@@ -225,21 +306,24 @@ function createSignal(h1, h4, candles, currentPrice) {
 
   return {
     ...base,
-    ...distanceFields,
+    ...entryFields,
     status: side,
     h1Trend: h1.trend,
     h4Trend: h4.trend,
+    macdHistogram: Number(histogram.toFixed(5)),
+    macdFilter: "12/26/9 HISTOGRAM DIRECTION",
+    atr: Number(atr.toFixed(3)),
+    stopATR: STOP_ATR,
     sl: Number(sl.toFixed(3)),
     tp: Number(tp.toFixed(3)),
-    riskReward: "1:1.8",
-    atr: Number(atr.toFixed(3)),
-    entryModelWarning: "LIVE_ENTRY_AND_BACKTEST_ENTRY_STILL_REQUIRE_ALIGNMENT"
+    riskReward: "1:2.0",
+    entryModelWarning:
+      "Backtest next H1 open kullanır; bu sinyal son tamamlanmış H1 kapanışını referans alır."
   };
 }
 
 async function getLatestPrice(key) {
   const url = new URL("https://api.twelvedata.com/price");
-
   url.searchParams.set("symbol", SYMBOL);
 
   const response = await fetch(url, {
@@ -259,11 +343,7 @@ async function getLatestPrice(key) {
 }
 
 module.exports = async function handler(req, res) {
-  res.setHeader(
-    "Cache-Control",
-    "public, s-maxage=50, stale-while-revalidate=10"
-  );
-
+  res.setHeader("Cache-Control", "no-store");
   res.setHeader(
     "Content-Type",
     "application/json; charset=utf-8"
@@ -318,16 +398,21 @@ module.exports = async function handler(req, res) {
     if (!Array.isArray(values)) {
       return res.status(502).json({
         ok: false,
-        error: "XAUUSD_CANDLE_DATA_UNAVAILABLE",
-        message: body.message || "XAUUSD mum verisi bulunamadı."
+        error: "XAUUSD_CANDLE_DATA_UNAVAILABLE"
       });
     }
 
     const candles = normalizeCandles(values);
     const h4Candles = aggregateH4(candles);
 
-    const h1 = analyze(candles, "H1");
-    const h4 = analyze(h4Candles, "H4");
+    if (candles.length < 60 || h4Candles.length < 20) {
+      return res.status(422).json({
+        ok: false,
+        error: "INSUFFICIENT_COMPLETED_CANDLES",
+        candleCount: candles.length,
+        h4CandleCount: h4Candles.length
+      });
+    }
 
     let quote;
 
@@ -344,19 +429,15 @@ module.exports = async function handler(req, res) {
       };
     }
 
-    const currentPrice =
-      quote.status === "ok" ? quote.price : null;
-
     const signal = createSignal(
-      h1,
-      h4,
       candles,
-      currentPrice
+      h4Candles,
+      quote.price
     );
 
     return res.status(200).json({
       ok: true,
-      engine: "QUANT PRO XAUUSD SIGNAL ENGINE V6",
+      engine: "QUANT PRO XAUUSD SIGNAL ENGINE V7",
       mode: "SIGNALS_ONLY",
       market: MARKET,
       symbol: SYMBOL,
@@ -364,23 +445,32 @@ module.exports = async function handler(req, res) {
       timeframe: "H1 + COMPLETED H4",
       candleCount: candles.length,
       completedH4Count: h4Candles.length,
-      generatedAt: new Date().toISOString(),
-      candleRule: "ONLY_COMPLETED_H1_CANDLES",
-      creditEstimate: {
-        candleRequest: 1,
-        livePriceRequest: 1,
-        expectedTotal: 2
+      firstCandle: candles[0].datetime,
+      lastCandle: candles[candles.length - 1].datetime,
+      strategy: {
+        h1EMA: "20/50",
+        h4EMA: "8/20",
+        macd: "12/26/9",
+        macdFilter: "HISTOGRAM DIRECTION",
+        atr: 14,
+        stopATR: STOP_ATR,
+        targetR: TARGET_R,
+        adxFilter: false
       },
       quote,
-      h1,
-      h4,
-      signal
+      h1: analyzeTrend(candles, 20, 50),
+      h4: analyzeTrend(h4Candles, 8, 20),
+      signal,
+      executionStatus: "RESEARCH_ONLY_NOT_TRADE_READY",
+      warning:
+        "OHLC yaklaşık simülasyonudur. Gerçek XM bid/ask, spread, komisyon ve bağımsız ileri test doğrulanmamıştır.",
+      generatedAt: new Date().toISOString()
     });
 
   } catch (error) {
     return res.status(500).json({
       ok: false,
-      error: "ENGINE_ERROR",
+      error: "SIGNAL_ENGINE_ERROR",
       message: error.message
     });
   }
