@@ -1,0 +1,18 @@
+{
+  "name": "QUANT PRO Market Signal Terminal",
+  "short_name": "QUANT PRO",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#080e19",
+  "theme_color": "#0b1220",
+  "description": "FX, altın, gümüş ve endeks sinyal paneli",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

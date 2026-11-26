@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
+  <meta name="description" content="QUANT PRO piyasa sinyal paneli">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <title>QUANT PRO</title>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">Q</div>
+      <div><div class="brand-name">QUANT <span>PRO</span></div><div class="brand-sub">MARKET SIGNAL TERMINAL</div></div>
+    </div>
+    <div class="top-actions">
+      <span class="connection"><i></i> DEMO MODU</span>
+      <button class="icon-btn" id="installBtn" hidden aria-label="Uygulamayı yükle">＋</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="intro">
+      <div>
+        <div class="eyebrow">PİYASA KONTROL MERKEZİ</div>
+        <h1>İşlem paneli</h1>
+        <p>Tek ekranda 8 piyasa · H1 / H4 sinyal takibi</p>
+      </div>
+      <div class="intro-actions">
+        <button class="connect-btn" id="connectBtn">Veri bağlantısını test et</button>
+        <button class="refresh-btn" id="refreshBtn"><span>↻</span> Yenile</button>
+      </div>
+    </section>
+
+    <section class="notice" id="connectionNotice">
+      <div class="notice-icon">i</div>
+      <div><strong id="connectionTitle">Twelve Data bağlantısı bekleniyor</strong><p id="connectionText">API anahtarı Netlify Functions ortam değişkenine eklendikten sonra bağlantı testi yapılabilir. Anahtar tarayıcıya gönderilmez.</p></div>
+    </section>
+
+    <section class="stats-grid">
+      <article class="stat-card"><span>İZLENEN PİYASA</span><strong id="marketCount">08</strong><small>FX · METAL · ENDEKS</small></article>
+      <article class="stat-card"><span>AKTİF SİNYAL</span><strong id="activeCount">—</strong><small>Canlı veri bekleniyor</small></article>
+      <article class="stat-card"><span>VERİ DURUMU</span><strong class="status-text">OFFLINE</strong><small>API bağlantısı yok</small></article>
+    </section>
+
+    <section class="section-head">
+      <div><div class="eyebrow">WATCHLIST</div><h2>Piyasalar</h2></div>
+      <div class="filters" role="group" aria-label="Piyasa filtresi">
+        <button class="filter active" data-filter="ALL">Tümü</button>
+        <button class="filter" data-filter="FX">FX</button>
+        <button class="filter" data-filter="METAL">Metal</button>
+        <button class="filter" data-filter="INDEX">Endeks</button>
+      </div>
+    </section>
+
+    <section class="market-grid" id="marketGrid" aria-live="polite"></section>
+
+    <section class="section-head signal-head" id="signal-head">
+      <div><div class="eyebrow">SIGNAL CENTER</div><h2>Sinyal geçmişi</h2></div>
+      <span class="pill muted">Henüz kayıt yok</span>
+    </section>
+    <div class="empty-state">
+      <div class="empty-icon">⌁</div>
+      <strong>Henüz sinyal üretilmedi</strong>
+      <p>Canlı piyasa verisi ve strateji motoru bağlandığında doğrulanmış sinyaller burada listelenecek.</p>
+    </div>
+
+    <section class="risk-panel" id="risk-panel">
+      <div class="section-head compact"><div><div class="eyebrow">RISK MANAGEMENT</div><h2>Risk ayarları</h2></div><span class="pill blue">ÖN AYAR</span></div>
+      <div class="risk-grid">
+        <div><span>Örnek hesap</span><strong>1.000 USD</strong></div>
+        <div><span>İşlem başı risk</span><strong>%0,5</strong></div>
+        <div><span>Minimum R:R</span><strong>1 : 1,8</strong></div>
+        <div><span>Zaman dilimi</span><strong>H1 + H4</strong></div>
+      </div>
+      <p class="risk-note">Bunlar başlangıç ayarlarıdır; emir gönderilmez. Lot hesabı, enstrüman sözleşme özellikleri ve broker koşulları doğrulandıktan sonra etkinleştirilecektir.</p>
+    </section>
+
+    <footer><span>QUANT PRO · v0.1.0</span><span>Yalnızca analiz arayüzü · Otomatik emir yok</span></footer>
+  </main>
+  <nav class="bottom-nav">
+    <a class="nav-item selected" href="#top"><span>▦</span>Panel</a>
+    <a class="nav-item" href="#marketGrid"><span>⌁</span>Piyasalar</a>
+    <a class="nav-item" href="#signal-head"><span>◷</span>Sinyaller</a>
+    <a class="nav-item" href="#risk-panel"><span>⚙</span>Ayarlar</a>
+  </nav>
+  <script src="app.js"></script>
+</body>
+</html>
