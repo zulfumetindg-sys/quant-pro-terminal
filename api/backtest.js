@@ -1,9 +1,10 @@
-const SYMBOL = "XAU/USD";
 
+const SYMBOL = "XAU/USD";
 const STOP_ATR = 1.5;
 const TARGET_R = 2.0;
 const SPREAD_USD = 0.30;
 const SLIPPAGES = [0.10, 0.20];
+const MAX_HOLD_HOURS = 72;
 const FORWARD_START = Date.parse("2026-11-26T20:00:00Z");
 
 const PERIODS = [
@@ -61,8 +62,8 @@ function makeH4(candles) {
     .filter(([time, group]) => {
       if (group.length !== 4) return false;
       group.sort((a, b) => a.time - b.time);
-      return group.every((candle, i) =>
-        candle.time === time + i * 3600000
+      return group.every((c, i) =>
+        c.time === time + i * 3600000
       );
     })
     .map(([time, group]) => ({
@@ -98,7 +99,9 @@ function buildIndicators(candles) {
   const e26 = emaSeries(close, 26);
 
   const macd = close.map((_, i) =>
-    e12[i] === null || e26[i] === null ? null : e12[i] - e26[i]
+    e12[i] === null || e26[i] === null
+      ? null
+      : e12[i] - e26[i]
   );
 
   const signal = Array(n).fill(null);
@@ -107,7 +110,9 @@ function buildIndicators(candles) {
 
   if (n > firstSignal) {
     let value = 0;
-    for (let i = firstMacd; i <= firstSignal; i++) value += macd[i];
+    for (let i = firstMacd; i <= firstSignal; i++) {
+      value += macd[i];
+    }
     value /= 9;
     signal[firstSignal] = value;
 
@@ -119,10 +124,13 @@ function buildIndicators(candles) {
   }
 
   const histogram = macd.map((value, i) =>
-    value === null || signal[i] === null ? null : value - signal[i]
+    value === null || signal[i] === null
+      ? null
+      : value - signal[i]
   );
 
   const trueRange = Array(n).fill(null);
+
   for (let i = 1; i < n; i++) {
     trueRange[i] = Math.max(
       candles[i].high - candles[i].low,
@@ -132,9 +140,12 @@ function buildIndicators(candles) {
   }
 
   const atr = Array(n).fill(null);
+
   for (let i = 14; i < n; i++) {
     let sum = 0;
-    for (let j = i - 13; j <= i; j++) sum += trueRange[j];
+    for (let j = i - 13; j <= i; j++) {
+      sum += trueRange[j];
+    }
     atr[i] = sum / 14;
   }
 
@@ -164,11 +175,16 @@ function getMetrics(trades) {
     winCount: wins.length,
     lossCount: losses.length,
     winRatePercent: trades.length
-      ? +(wins.length / trades.length * 100).toFixed(2) : null,
-    profitFactor: grossLoss > 0 ? +(grossWin / grossLoss).toFixed(3) : null,
+      ? +(wins.length / trades.length * 100).toFixed(2)
+      : null,
+    profitFactor: grossLoss > 0
+      ? +(grossWin / grossLoss).toFixed(3)
+      : grossWin > 0 ? "NO_LOSSES" : null,
     netProfitR: +net.toFixed(2),
     maxDrawdownR: +drawdown.toFixed(2),
-    averageR: trades.length ? +(net / trades.length).toFixed(3) : null,
+    averageR: trades.length
+      ? +(net / trades.length).toFixed(3)
+      : null,
     insufficientSample: trades.length < 30
   };
 }
@@ -182,9 +198,12 @@ function getSignal(candles, h4, indicators, i, h4Index) {
 
   const h4Trend = trend(h4, h4Index, 8, 20);
 
-  if (!h4Trend || h1Trend === "WAIT" || h1Trend !== h4Trend) return null;
+  if (!h4Trend || h1Trend === "WAIT" || h1Trend !== h4Trend) {
+    return null;
+  }
 
   const histogram = indicators.histogram[i];
+
   if (
     histogram === null ||
     (h1Trend === "BUY" && histogram <= 0) ||
@@ -194,14 +213,22 @@ function getSignal(candles, h4, indicators, i, h4Index) {
   const atr = indicators.atr[i];
   if (!atr || !Number.isFinite(atr)) return null;
 
-  return { side: h1Trend, atr, reference: candles[i].close };
+  return {
+    side: h1Trend,
+    atr,
+    reference: candles[i].close
+  };
 }
 
-function calculateTrade(candles, i, signal, slippage, maxIndex) {
+function calculateTrade(candles, i, signal, slippage, maxIndex, forceCloseAtEnd) {
   const halfSpread = SPREAD_USD / 2;
   const { side, atr, reference } = signal;
 
-  const riskDistance = Math.max(atr * STOP_ATR, Math.abs(reference) * 0.001);
+  const riskDistance = Math.max(
+    atr * STOP_ATR,
+    Math.abs(reference) * 0.001
+  );
+
   const entry = side === "BUY"
     ? reference + halfSpread + slippage
     : reference - halfSpread - slippage;
@@ -214,9 +241,10 @@ function calculateTrade(candles, i, signal, slippage, maxIndex) {
     ? reference + riskDistance * TARGET_R
     : reference - riskDistance * TARGET_R;
 
-  const lastCheck = Math.min(i + 72, maxIndex);
+  const maxHoldTime =
+    candles[i].time + 3600000 + MAX_HOLD_HOURS * 3600000;
 
-  for (let j = i + 1; j <= lastCheck; j++) {
+  for (let j = i + 1; j <= maxIndex; j++) {
     const candle = candles[j];
 
     const hitSL = side === "BUY"
@@ -227,8 +255,8 @@ function calculateTrade(candles, i, signal, slippage, maxIndex) {
       ? candle.high - halfSpread >= tp
       : candle.low + halfSpread <= tp;
 
-    let exit;
-    let exitReason;
+    let exit = null;
+    let exitReason = null;
 
     if (hitSL) {
       exit = side === "BUY" ? sl - slippage : sl + slippage;
@@ -236,16 +264,21 @@ function calculateTrade(candles, i, signal, slippage, maxIndex) {
     } else if (hitTP) {
       exit = side === "BUY" ? tp - slippage : tp + slippage;
       exitReason = "TAKE_PROFIT";
-    } else if (j === i + 72) {
+    } else if (
+      candle.time + 3600000 >= maxHoldTime ||
+      (forceCloseAtEnd && j === maxIndex)
+    ) {
       exit = side === "BUY"
         ? candle.close - halfSpread - slippage
         : candle.close + halfSpread + slippage;
       exitReason = "TIME_EXIT";
-    } else {
-      continue;
     }
 
-    const profit = side === "BUY" ? exit - entry : entry - exit;
+    if (exit === null) continue;
+
+    const profit = side === "BUY"
+      ? exit - entry
+      : entry - exit;
 
     return {
       side,
@@ -262,6 +295,11 @@ function calculateTrade(candles, i, signal, slippage, maxIndex) {
     };
   }
 
+  const last = candles[maxIndex];
+  const markPrice = side === "BUY"
+    ? last.close - halfSpread - slippage
+    : last.close + halfSpread + slippage;
+
   return {
     open: true,
     side,
@@ -270,12 +308,10 @@ function calculateTrade(candles, i, signal, slippage, maxIndex) {
     entry,
     stopLoss: sl,
     takeProfit: tp,
-    lastPrice: candles[maxIndex].close,
+    lastPrice: last.close,
     unrealizedR: +(
-      (side === "BUY"
-        ? candles[maxIndex].close - halfSpread - slippage - entry
-        : entry - candles[maxIndex].close - halfSpread - slippage
-      ) / riskDistance
+      (side === "BUY" ? markPrice - entry : entry - markPrice) /
+      riskDistance
     ).toFixed(3),
     status: "OPEN_NOT_COUNTED"
   };
@@ -286,10 +322,18 @@ function runBacktest(candles, h4, indicators, slippage, period) {
   const periodStart = Date.parse(period.start);
   const periodEnd = Date.parse(period.end);
 
+  const firstAfterPeriod = candles.findIndex(
+    x => x.time >= periodEnd
+  );
+
+  const lastIndex = firstAfterPeriod < 0
+    ? candles.length - 1
+    : firstAfterPeriod - 1;
+
   let h4Index = -1;
   let i = 60;
 
-  while (i < candles.length - 1) {
+  while (i < lastIndex) {
     const signalCloseTime = candles[i].time + 3600000;
 
     while (
@@ -297,27 +341,35 @@ function runBacktest(candles, h4, indicators, slippage, period) {
       h4[h4Index + 1].end <= signalCloseTime
     ) h4Index++;
 
-    if (signalCloseTime <= periodStart || signalCloseTime > periodEnd) {
+    if (
+      signalCloseTime <= periodStart ||
+      signalCloseTime >= periodEnd
+    ) {
       i++;
       continue;
     }
 
     const signal = getSignal(candles, h4, indicators, i, h4Index);
+
     if (!signal) {
       i++;
       continue;
     }
 
-    const trade = calculateTrade(candles, i, signal, slippage, candles.length - 1);
+    const trade = calculateTrade(
+      candles, i, signal, slippage, lastIndex, true
+    );
 
     if (trade.open) {
       i++;
       continue;
     }
 
+    const exitIndex = trade.exitIndex;
     delete trade.exitIndex;
+
     trades.push(trade);
-    i = Math.max(i + 1, trade.exitIndex || i + 1);
+    i = Math.max(i + 1, exitIndex + 1);
   }
 
   return {
@@ -341,7 +393,8 @@ function runForwardTest(candles, h4, indicators, slippage) {
   while (i < candles.length - 1) {
     const signalCloseTime = candles[i].time + 3600000;
 
-    if (signalCloseTime < FORWARD_START) {
+    // Başlangıç anındaki ve öncesindeki mumları kesinlikle alma.
+    if (signalCloseTime <= FORWARD_START) {
       i++;
       continue;
     }
@@ -352,25 +405,31 @@ function runForwardTest(candles, h4, indicators, slippage) {
     ) h4Index++;
 
     const signal = getSignal(candles, h4, indicators, i, h4Index);
+
     if (!signal) {
       i++;
       continue;
     }
 
-    const trade = calculateTrade(candles, i, signal, slippage, candles.length - 1);
+    const trade = calculateTrade(
+      candles,
+      i,
+      signal,
+      slippage,
+      candles.length - 1,
+      false
+    );
 
     if (trade.open) {
       openTrade = trade;
       break;
     }
 
-    const exitIndex = candles.findIndex(
-      x => x.time + 3600000 === Date.parse(trade.exitTime)
-    );
-
+    const exitIndex = trade.exitIndex;
     delete trade.exitIndex;
+
     trades.push(trade);
-    i = Math.max(i + 1, exitIndex >= 0 ? exitIndex + 1 : i + 1);
+    i = Math.max(i + 1, exitIndex + 1);
   }
 
   return {
@@ -392,12 +451,19 @@ module.exports = async function handler(req, res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
 
   if (req.method !== "GET") {
-    return res.status(405).json({ ok: false, error: "METHOD_NOT_ALLOWED" });
+    return res.status(405).json({
+      ok: false,
+      error: "METHOD_NOT_ALLOWED"
+    });
   }
 
   const key = process.env.TWELVE_DATA_API_KEY;
+
   if (!key) {
-    return res.status(503).json({ ok: false, error: "API_KEY_MISSING" });
+    return res.status(503).json({
+      ok: false,
+      error: "API_KEY_MISSING"
+    });
   }
 
   try {
@@ -414,7 +480,11 @@ module.exports = async function handler(req, res) {
 
     const body = await response.json();
 
-    if (!response.ok || body.status === "error" || !Array.isArray(body.values)) {
+    if (
+      !response.ok ||
+      body.status === "error" ||
+      !Array.isArray(body.values)
+    ) {
       return res.status(502).json({
         ok: false,
         error: "HISTORICAL_DATA_ERROR",
@@ -422,22 +492,30 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    const now = Date.now();
+    const candleMap = new Map();
 
-    const candles = body.values
-      .map(x => ({
+    for (const x of body.values) {
+      const candle = {
         time: parseTime(x.datetime),
         open: Number(x.open),
         high: Number(x.high),
         low: Number(x.low),
         close: Number(x.close)
-      }))
-      .filter(x =>
-        Number.isFinite(x.time) &&
-        x.time + 3600000 <= now &&
-        [x.open, x.high, x.low, x.close].every(Number.isFinite) &&
-        x.high >= x.low
-      )
+      };
+
+      if (
+        !Number.isFinite(candle.time) ||
+        ![candle.open, candle.high, candle.low, candle.close].every(Number.isFinite) ||
+        candle.high < Math.max(candle.open, candle.close, candle.low) ||
+        candle.low > Math.min(candle.open, candle.close, candle.high)
+      ) continue;
+
+      if (candle.time + 3600000 <= Date.now()) {
+        candleMap.set(candle.time, candle);
+      }
+    }
+
+    const candles = [...candleMap.values()]
       .sort((a, b) => a.time - b.time);
 
     if (candles.length < 500) {
@@ -449,6 +527,7 @@ module.exports = async function handler(req, res) {
     }
 
     const h4 = makeH4(candles);
+
     if (h4.length < 50) {
       return res.status(422).json({
         ok: false,
@@ -463,43 +542,58 @@ module.exports = async function handler(req, res) {
 
     if (mode === "forward") {
       const forwardCandles = candles.filter(
-        x => x.time + 3600000 >= FORWARD_START
+        x => x.time >= FORWARD_START
+      );
+
+      const warmupComplete =
+        candles[0].time <= FORWARD_START - 100 * 3600000;
+
+      const results = SLIPPAGES.map(slippage =>
+        runForwardTest(candles, h4, indicators, slippage)
       );
 
       return res.status(200).json({
         ok: true,
-        engine: "QUANT PRO XAUUSD FORWARD TEST V1",
+        engine: "QUANT PRO XAUUSD FORWARD TEST V2",
         mode: "OUT_OF_SAMPLE_FORWARD_TEST",
         symbol: SYMBOL,
         provider: "Twelve Data",
         timeframe: "H1 + COMPLETED H4",
         startTime: new Date(FORWARD_START).toISOString(),
         firstForwardCandle: forwardCandles.length
-          ? new Date(forwardCandles[0].time).toISOString() : null,
+          ? new Date(forwardCandles[0].time).toISOString()
+          : null,
         lastForwardCandle: forwardCandles.length
-          ? new Date(forwardCandles[forwardCandles.length - 1].time + 3600000).toISOString() : null,
+          ? new Date(forwardCandles[forwardCandles.length - 1].time + 3600000).toISOString()
+          : null,
         forwardCandleCount: forwardCandles.length,
+        warmupComplete,
+        historyStatus: warmupComplete
+          ? "START_AND_INDICATOR_HISTORY_AVAILABLE"
+          : "HISTORY_MAY_BE_TRUNCATED",
         strategy: {
           h1: "EMA20 / EMA50",
           h4: "EMA8 / EMA20",
           macd: "12/26/9 HISTOGRAM DIRECTION",
           stopLoss: "ATR14 x 1.5",
           takeProfit: "2.0R",
-          maxHoldingHours: 72
+          maxHoldingHours: MAX_HOLD_HOURS
         },
-        results: SLIPPAGES.map(s =>
-          runForwardTest(candles, h4, indicators, s)
-        ),
+        results,
+        persistence: "NOT_STORED_PERMANENTLY",
         executionStatus: "RESEARCH_ONLY_NOT_TRADE_READY",
-        warning: "Yalnızca başlangıç zamanından sonraki sinyaller değerlendirilir. Açık işlemler kapanmış işlem istatistiklerine dahil edilmez. Tarihsel XM spread ve komisyon doğrulanmamıştır.",
+        warning: "İleri test, Twelve Data'nın sunduğu son 5000 mum üzerinden yeniden hesaplanır. Kalıcı veri tabanı olmadığı için sağlayıcının geçmiş mum sınırı aşılırsa eski test verileri kaybolabilir. XM tarihsel spread ve komisyon doğrulanmamıştır.",
         generatedAt: new Date().toISOString()
       });
     }
 
     const results = [];
+
     for (const slippage of SLIPPAGES) {
       for (const period of PERIODS) {
-        results.push(runBacktest(candles, h4, indicators, slippage, period));
+        results.push(
+          runBacktest(candles, h4, indicators, slippage, period)
+        );
       }
     }
 
@@ -509,7 +603,7 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      engine: "QUANT PRO XAUUSD BACKTEST V9",
+      engine: "QUANT PRO XAUUSD BACKTEST V10",
       mode: "SIGNALS_ONLY",
       market: "XAUUSD",
       symbol: SYMBOL,
@@ -527,7 +621,7 @@ module.exports = async function handler(req, res) {
         stopLoss: "ATR14 x 1.5",
         takeProfit: "2.0R",
         entry: "LAST COMPLETED H1 CLOSE",
-        maxHoldingHours: 72
+        maxHoldingHours: MAX_HOLD_HOURS
       },
       costModel: {
         method: "DIRECTIONAL_BID_ASK_APPROXIMATION",
@@ -535,8 +629,7 @@ module.exports = async function handler(req, res) {
         spreadUSD: SPREAD_USD,
         slippagePerSideUSD: SLIPPAGES,
         historicalXMSpreadAvailable: false,
-        commissionVerified: false,
-        note: "Sabit spread ve kayma yaklaşımıdır. Tarihsel XM bid/ask tick verisi ve komisyon doğrulanmamıştır."
+        commissionVerified: false
       },
       sampleRequirement: 30,
       results,
@@ -549,7 +642,7 @@ module.exports = async function handler(req, res) {
       },
       historicalWinProbability: "NOT_A_LIVE_SIGNAL_PROBABILITY",
       executionStatus: "RESEARCH_ONLY_NOT_TRADE_READY",
-      warning: "Bu tarihsel simülasyondur. Giriş tamamlanmış H1 kapanış fiyatını referans alır. Bağımsız ileri test ve gerçek XM işlem maliyetleri doğrulanmamıştır.",
+      warning: "Bu sonuçlar tarihsel OHLC simülasyonudur. Önceki V9 sonuçlarıyla birebir karşılaştırılmamalıdır; işlem sırası ve dönem sınırı düzeltmeleri nedeniyle yeniden hesaplanmıştır. Gerçek XM işlem maliyetleri doğrulanmamıştır.",
       generatedAt: new Date().toISOString()
     });
 
