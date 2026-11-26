@@ -487,6 +487,15 @@ test("manual journal accepts only fresh XAUUSD BUY or SELL signals with at least
   assert.equal(valid.trade.status, "OPEN");
   assert.equal(valid.trade.costs, "NOT_INCLUDED");
 
+  const sellSignal = {
+    ...signal,
+    status: "SELL",
+    signalId: "XAUUSD:SELL:" + candleClosedAt,
+    sl: 2660,
+    tp: 2630
+  };
+  assert.equal(journal.validateOpenPayload({ signal: sellSignal, fillPrice: 2650 }, now).ok, true);
+
   assert.equal(journal.validateOpenPayload({ signal: { ...signal, symbol: "EURUSD" }, fillPrice: 2650 }, now).error, "XAUUSD_ONLY");
   assert.equal(journal.validateOpenPayload({ signal: { ...signal, status: "WAIT" }, fillPrice: 2650 }, now).error, "LIVE_BUY_OR_SELL_REQUIRED");
   const expiredClose = now - 3600001;
