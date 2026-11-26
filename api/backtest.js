@@ -450,6 +450,19 @@ function hasForwardWarmup(candles, forwardStart) {
   return true;
 }
 
+function hasForwardContinuity(candles, forwardStart) {
+  const forward = candles.filter(c => c.time >= forwardStart);
+  if (forward.length === 0) return true;
+
+  const maxGapMs = 72 * 3600000;
+  if (forward[0].time - forwardStart > maxGapMs) return false;
+
+  for (let i = 1; i < forward.length; i++) {
+    if (forward[i].time - forward[i - 1].time > maxGapMs) return false;
+  }
+  return true;
+}
+
 function runForwardTest(candles, h4, indicators, slippage) {
   const trades = [];
   let openTrade = null;
@@ -613,6 +626,21 @@ module.exports = async function handler(req, res) {
       );
 
       const warmupComplete = hasForwardWarmup(candles, FORWARD_START);
+      const forwardContinuity = hasForwardContinuity(candles, FORWARD_START);
+
+      if (!forwardContinuity) {
+        return res.status(422).json({
+          ok: false,
+          error: "FORWARD_TEST_DATA_GAP",
+          mode: "OUT_OF_SAMPLE_FORWARD_TEST",
+          symbol: SYMBOL,
+          startTime: new Date(FORWARD_START).toISOString(),
+          maximumAllowedGapHours: 72,
+          historyStatus: "FORWARD_CANDLE_SEQUENCE_INCOMPLETE",
+          executionStatus: "RESEARCH_ONLY_NOT_TRADE_READY",
+          warning: "İleri test döneminde 72 saati aşan veri boşluğu bulundu. Eksik fiyat hareketleriyle performans hesaplanmadı."
+        });
+      }
 
       // Do not publish forward-test metrics when the original warmup window
       // has rolled out of the provider's limited historical candle window.
@@ -750,5 +778,5 @@ module.exports = async function handler(req, res) {
 module.exports.__test = {
   parseTime, emaSeries, ema, makeH4, trend, buildIndicators,
   getMetrics, getSignal, calculateTrade, runBacktest, runForwardTest,
-  hasForwardWarmup
+  hasForwardWarmup, hasForwardContinuity
 };
