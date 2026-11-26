@@ -56,6 +56,21 @@ function renderSignal(signal) {
   box.innerHTML = html;
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error && error.name === "AbortError") {
+      throw new Error("İstek zaman aşımına uğradı (" + Math.round(timeoutMs / 1000) + " sn). API yanıt vermedi.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function loadSignal(force = false) {
   const now = Date.now();
   const remaining = MIN_REFRESH_MS - (now - lastSignalRequestAt);
@@ -71,7 +86,7 @@ async function loadSignal(force = false) {
   lastSignalRequestAt = now;
 
   try {
-    const response = await fetch("/api/signal-engine", { cache: "no-store" });
+    const response = await fetchWithTimeout("/api/signal-engine", { cache: "no-store" }, 30000);
     const payload = await response.json();
     if (!response.ok || !payload.ok) {
       throw new Error(payload.message || payload.error || "Altın verisi alınamadı.");
@@ -157,7 +172,7 @@ async function loadBacktest() {
   output.textContent = "Tarihsel altın mumları analiz ediliyor…";
 
   try {
-    const response = await fetch("/api/backtest", { cache: "no-store" });
+    const response = await fetchWithTimeout("/api/backtest", { cache: "no-store" }, 60000);
     const payload = await response.json();
     if (!response.ok || !payload.ok) {
       throw new Error(payload.message || payload.error || "Geri test başarısız.");
@@ -185,7 +200,8 @@ async function loadBacktest() {
 }
 
 $("refreshBtn").addEventListener("click", () => loadSignal());
-$("backtestBtn").addEventListener("click", loadBacktest);\n$("aiAnalyzeBtn").addEventListener("click", loadFreeAnalysis);
+$("backtestBtn").addEventListener("click", loadBacktest);
+$("aiAnalyzeBtn").addEventListener("click", loadFreeAnalysis);
 
 let installPrompt;
 window.addEventListener("beforeinstallprompt", event => {
