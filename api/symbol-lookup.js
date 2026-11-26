@@ -1,12 +1,7 @@
+
 const QUERIES = {
-  EURUSD: "EUR/USD",
-  GBPUSD: "GBP/USD",
-  USDJPY: "USD/JPY",
-  USDTRY: "USD/TRY",
-  XAUUSD: "XAU/USD",
-  XAGUSD: "XAG/USD",
-  NAS100: "NASDAQ 100",
-  DAX40: "DAX"
+  NASDAQ: ["NDX", "NASDAQ", "NASDAQ 100"],
+  DAX: ["DAX", "DAX 40", "GER40"]
 };
 
 module.exports = async function handler(req, res) {
@@ -22,8 +17,12 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  const results = await Promise.all(
-    Object.entries(QUERIES).map(async ([market, query]) => {
+  const results = {};
+
+  for (const [market, queries] of Object.entries(QUERIES)) {
+    results[market] = [];
+
+    for (const query of queries) {
       try {
         const url = new URL(
           "https://api.twelvedata.com/symbol_search"
@@ -33,21 +32,12 @@ module.exports = async function handler(req, res) {
         url.searchParams.set("outputsize", "10");
 
         const response = await fetch(url, {
-          headers: {
-            Authorization: `apikey ${key}`
-          }
+          headers: { Authorization: `apikey ${key}` }
         });
 
         const body = await response.json();
 
-        if (!response.ok || body.status === "error") {
-          return [market, {
-            query,
-            error: body.message || "Arama başarısız."
-          }];
-        }
-
-        return [market, {
+        results[market].push({
           query,
           matches: (body.data || []).map(item => ({
             symbol: item.symbol,
@@ -56,20 +46,21 @@ module.exports = async function handler(req, res) {
             country: item.country,
             currency: item.currency,
             type: item.instrument_type
-          }))
-        }];
+          })),
+          error: body.message || null
+        });
       } catch {
-        return [market, {
+        results[market].push({
           query,
-          error: "Twelve Data servisine erişilemedi."
-        }];
+          error: "Arama başarısız."
+        });
       }
-    })
-  );
+    }
+  }
 
   return res.status(200).json({
     ok: true,
     provider: "Twelve Data",
-    results: Object.fromEntries(results)
+    results
   });
 };
