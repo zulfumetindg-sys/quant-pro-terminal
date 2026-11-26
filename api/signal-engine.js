@@ -8,7 +8,6 @@ const MAX_ENTRY_DISTANCE_PERCENT = 0.10;
 const CACHE_TTL_MS = 60000;
 let cachedPayload = null;
 let cachedAt = 0;
-let pendingRequest = null;
 
 function parseTime(value) {
   let s = String(value || "").trim();
@@ -366,11 +365,6 @@ module.exports = async function handler(req, res) {
   if (cachedPayload && Date.now() - cachedAt < CACHE_TTL_MS) {
     return res.status(200).json({ ...cachedPayload, cache: "HIT_60_SECONDS" });
   }
-  if (pendingRequest) {
-    try { return res.status(200).json({ ...(await pendingRequest), cache: "SHARED_IN_FLIGHT" }); }
-    catch (e) { pendingRequest = null; }
-  }
-
   if (!key) {
     return res.status(503).json({
       ok: false,
@@ -388,7 +382,6 @@ module.exports = async function handler(req, res) {
     url.searchParams.set("outputsize", "200");
     url.searchParams.set("timezone", "UTC");
 
-    pendingRequest = (async () => {
     const response = await fetch(url, {
       headers: {
         Authorization: `apikey ${key}`
@@ -481,16 +474,11 @@ module.exports = async function handler(req, res) {
         "OHLC yaklaşık simülasyonudur. Gerçek XM bid/ask, spread, komisyon ve bağımsız ileri test doğrulanmamıştır.",
       generatedAt: new Date().toISOString()
     };
-    return payload;
-    })();
-    const payload = await pendingRequest;
     cachedPayload = payload;
     cachedAt = Date.now();
-    pendingRequest = null;
     return res.status(200).json({ ...payload, cache: "MISS" });
 
   } catch (error) {
-    pendingRequest = null;
     return res.status(500).json({
       ok: false,
       error: "SIGNAL_ENGINE_ERROR",
