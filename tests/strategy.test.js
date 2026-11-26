@@ -149,6 +149,14 @@ test("live engine rejects missing, future and stale completed H1 candle data", (
   assert.equal(live.checkLatestCompletedH1Freshness(expired, now).reason, "H1_CANDLES_STALE");
 });
 
+test("default H1 freshness limit is one hour after candle close", () => {
+  const now = Date.UTC(2026, 10, 26, 20, 30, 0);
+  const withinLimit = [candle(now - 2 * 3600000, 2600)];
+  const beyondLimit = [candle(now - 3 * 3600000, 2600)];
+  assert.equal(live.checkLatestCompletedH1Freshness(withinLimit, now).fresh, true);
+  assert.equal(live.checkLatestCompletedH1Freshness(beyondLimit, now).reason, "H1_CANDLES_STALE");
+});
+
 test("live signal identity is stable for one completed H1 setup and changes on the next H1 close", () => {
   const base = Date.UTC(2026, 0, 5, 0, 0, 0);
   const data = Array.from({ length: 500 }, (_, i) =>
