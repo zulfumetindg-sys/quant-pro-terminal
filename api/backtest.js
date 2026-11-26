@@ -309,7 +309,7 @@ function calculateTrade(candles, i, signal, slippage, maxIndex, forceCloseAtEnd)
     open: true,
     side,
     signalTime: new Date(candles[i].time + 3600000).toISOString(),
-    entryReference: reference,
+    entryReference: executionReference,
     entry,
     stopLoss: sl,
     takeProfit: tp,
@@ -625,7 +625,8 @@ module.exports = async function handler(req, res) {
         adxFilter: false,
         stopLoss: "ATR14 x 1.5",
         takeProfit: "2.0R",
-        entry: "LAST COMPLETED H1 CLOSE",
+        signalReference: "LAST_COMPLETED_H1_CLOSE",
+        entry: "NEXT_H1_OPEN_AFTER_SIGNAL",
         maxHoldingHours: MAX_HOLD_HOURS
       },
       costModel: {
