@@ -230,9 +230,15 @@ test("stale and future last_quote_at values are rejected", async () => {
 });
 
 
-test("forward test refuses to run without its original 100-hour warmup history", () => {
-  const start = Date.UTC(2026, 10, 26, 20, 0, 0);
-  assert.equal(backtest.hasForwardWarmup([{ time: start - 100 * 3600000 }], start), true);
-  assert.equal(backtest.hasForwardWarmup([{ time: start - 99 * 3600000 }], start), false);
+test("forward test requires 400 H1 and 100 completed H4 warmup candles", () => {
+  const base = Date.UTC(2026, 0, 5, 0, 0, 0);
+  const start = base + 400 * 3600000;
+  const history = Array.from({ length: 400 }, (_, i) =>
+    candle(base + i * 3600000, 2300 + i * 0.05, 1)
+  );
+
+  assert.equal(backtest.hasForwardWarmup(history, start), true);
+  assert.equal(backtest.hasForwardWarmup(history.slice(1), start), false);
+  assert.equal(backtest.hasForwardWarmup(history, start + 100 * 3600000), false);
   assert.equal(backtest.hasForwardWarmup([], start), false);
 });
