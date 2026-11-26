@@ -499,4 +499,7 @@ module.exports = async function handler(req, res) {
     });
   }
 };
-\n\n// Export pure functions for deterministic automated tests. The default export remains the Vercel handler.\nmodule.exports.__test = { parseTime, normalizeCandles, emaSeries, ema, aggregateH4, calculateMACDHistogram, calculateATR, analyzeTrend, createSignal };\n
+
+
+// Export pure functions for deterministic automated tests. The default export remains the Vercel handler.
+module.exports.__test = { parseTime, normalizeCandles, emaSeries, ema, aggregateH4, calculateMACDHistogram, calculateATR, analyzeTrend, createSignal };
