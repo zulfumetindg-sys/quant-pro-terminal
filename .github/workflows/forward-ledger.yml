@@ -1,0 +1,116 @@
+name: QUANT PRO persistent XAUUSD forward ledger
+
+on:
+  schedule:
+    - cron: "17 */6 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: quant-pro-forward-ledger
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout persistent ledger branch
+        uses: actions/checkout@v4
+        with:
+          ref: forward-ledger
+          fetch-depth: 0
+
+      - name: Collect and persist closed forward-test trades
+        env:
+          API_URL: https://quant-pro-terminal-ecru.vercel.app/api/backtest?mode=forward
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+
+          const file = "forward-ledger.json";
+          const ledger = JSON.parse(fs.readFileSync(file, "utf8"));
+          const checkedAt = new Date().toISOString();
+
+          let response;
+          let payload;
+          try {
+            response = await fetch(process.env.API_URL, {
+              headers: { accept: "application/json" },
+              signal: AbortSignal.timeout(45000),
+              cache: "no-store"
+            });
+            payload = await response.json();
+          } catch (error) {
+            payload = { ok: false, error: "FORWARD_API_REQUEST_FAILED", message: String(error) };
+          }
+
+          ledger.lastCheckedAt = checkedAt;
+          if (!response?.ok || payload?.ok !== true) {
+            ledger.lastError = {
+              at: checkedAt,
+              httpStatus: response?.status ?? null,
+              error: payload?.error ?? "INVALID_FORWARD_RESPONSE",
+              message: payload?.message ?? null,
+              historyStatus: payload?.historyStatus ?? null
+            };
+            ledger.checks.push({
+              checkedAt,
+              ok: false,
+              error: ledger.lastError.error,
+              httpStatus: ledger.lastError.httpStatus
+            });
+          } else {
+            ledger.lastError = null;
+            const results = Array.isArray(payload.results) ? payload.results : [];
+            ledger.checks.push({
+              checkedAt,
+              ok: true,
+              forwardCandleCount: payload.forwardCandleCount ?? 0,
+              warmupComplete: payload.warmupComplete === true,
+              results: results.map(result => ({
+                slippagePerSideUSD: result.slippagePerSideUSD,
+                status: result.status,
+                closedTradeMetrics: result.closedTradeMetrics,
+                openTrade: result.openTrade ?? null
+              }))
+            });
+
+            const known = new Set(
+              ledger.trades.map(trade =>
+                [trade.slippagePerSideUSD, trade.signalTime, trade.side].join("|")
+              )
+            );
+            for (const result of results) {
+              for (const trade of (result.lastClosedTrades || [])) {
+                const item = {
+                  ...trade,
+                  slippagePerSideUSD: result.slippagePerSideUSD,
+                  recordedAt: checkedAt
+                };
+                const key = [item.slippagePerSideUSD, item.signalTime, item.side].join("|");
+                if (!known.has(key)) {
+                  ledger.trades.push(item);
+                  known.add(key);
+                }
+              }
+            }
+          }
+
+          ledger.checks = ledger.checks.slice(-1000);
+          fs.writeFileSync(file, JSON.stringify(ledger, null, 2) + "\n");
+          NODE
+
+      - name: Commit ledger update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- forward-ledger.json; then
+            echo "No ledger changes to commit."
+            exit 0
+          fi
+          git add forward-ledger.json
+          git commit -m "Record scheduled XAUUSD forward-test snapshot"
+          git push origin HEAD:forward-ledger
