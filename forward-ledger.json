@@ -3,9 +3,9 @@
   "symbol": "XAUUSD",
   "timeframe": "H1 + COMPLETED H4",
   "startTime": "2026-11-26T20:00:00.000Z",
-  "lastCheckedAt": "2026-11-26T21:17:53.212Z",
+  "lastCheckedAt": "2026-11-26T21:27:17.259Z",
   "lastError": {
-    "at": "2026-11-26T21:17:53.212Z",
+    "at": "2026-11-26T21:27:17.259Z",
     "httpStatus": 200,
     "error": "INVALID_OR_INCOMPLETE_FORWARD_RESPONSE",
     "message": "Forward API yanıtı eksik veya beklenen iki maliyet senaryosuyla uyuşmuyor.",
@@ -102,6 +102,12 @@
     },
     {
       "checkedAt": "2026-11-26T21:17:53.212Z",
+      "ok": false,
+      "error": "INVALID_OR_INCOMPLETE_FORWARD_RESPONSE",
+      "httpStatus": 200
+    },
+    {
+      "checkedAt": "2026-11-26T21:27:17.259Z",
       "ok": false,
       "error": "INVALID_OR_INCOMPLETE_FORWARD_RESPONSE",
       "httpStatus": 200
