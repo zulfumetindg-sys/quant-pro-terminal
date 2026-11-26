@@ -338,6 +338,7 @@ function createSignal(candles, h4Candles, currentPrice) {
     sl: Number(sl.toFixed(3)),
     tp: Number(tp.toFixed(3)),
     riskReward: "1:2.0",
+    riskRewardBasis: "GROSS_BEFORE_SPREAD_SLIPPAGE_AND_COMMISSION",
     entryModelWarning:
       "Giriş, Twelve Data son fiyatının yaklaşık tahminidir; bid/ask, spread ve kayma dahil değildir. Mesafe, son tamamlanmış H1 kapanışına göredir."
   };

@@ -44,7 +44,7 @@ function renderSignal(signal) {
     '<div><small>Giriş referansı</small><b>' + fmt(signal.entry) + '</b></div>' +
     '<div><small>Stop loss</small><b>' + fmt(signal.sl) + '</b></div>' +
     '<div><small>Take profit</small><b>' + fmt(signal.tp) + '</b></div>' +
-    '<div><small>Risk / getiri</small><b>' + esc(signal.riskReward || "—") + '</b></div>' +
+    '<div><small>Brüt risk / getiri (maliyet öncesi)</small><b>' + esc(signal.riskReward || "—") + '</b></div>' +
     '<div><small>Giriş mesafesi</small><b>' + (signal.entryDistancePercent == null ? "—" : esc(signal.entryDistancePercent) + "%") + '</b></div>' +
     '<div><small>Geçmiş kazanma oranı</small><b>' + esc(signal.historicalWinProbability || "UNAVAILABLE") + '</b></div>' +
     '<div><small>H1 / H4 trendi</small><b>' + trend(signal.h1Trend) + ' / ' + trend(signal.h4Trend) + '</b></div>' +
@@ -150,7 +150,7 @@ function loadFreeAnalysis() {
       lines.push("MACD histogramı: veri yok.");
     }
     lines.push("ATR(14): " + (s.atr == null ? "veri yok" : s.atr) + " · stop mesafesi volatiliteye göre hesaplandı.");
-    lines.push("Risk/getiri: " + (s.riskReward || "hesaplanamadı") + " · giriş mesafesi: " +
+    lines.push("Risk/getiri: " + (s.riskReward || "hesaplanamadı") + " (spread/kayma/komisyon öncesi) · giriş mesafesi: " +
       (s.entryDistancePercent == null ? "bilinmiyor" : s.entryDistancePercent + "%") + ".");
     lines.push("Giriş: " + (s.entry ?? "—") + " · SL: " + (s.sl ?? "—") + " · TP: " + (s.tp ?? "—"));
   } else {

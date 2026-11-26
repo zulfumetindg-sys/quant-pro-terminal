@@ -107,6 +107,7 @@ test("live signal entry and risk levels are based on the current provider quote 
   assert.ok(signal.sl < quote);
   assert.ok(signal.tp > quote);
   assert.equal(signal.riskReward, "1:2.0");
+  assert.equal(signal.riskRewardBasis, "GROSS_BEFORE_SPREAD_SLIPPAGE_AND_COMMISSION");
   assert.equal(signal.historicalWinProbability, "UNAVAILABLE");
   assert.equal(signal.executionStatus, "RESEARCH_ONLY_NOT_TRADE_READY");
 });
