@@ -464,7 +464,6 @@ function runBacktest(candles, h4, indicators, slippage, period) {
     metrics: getMetrics(trades),
     volatilityDiagnostics: summarizeVolatilityDiagnostics([...trades, openTrade]),
     volatilityOutcomes: summarizeVolatilityOutcomes(trades),
-    volatilityOutcomes: summarizeVolatilityOutcomes(trades),
     openTrade,
     lastTrades: trades.slice(-10)
   };
@@ -569,6 +568,7 @@ function runForwardTest(candles, h4, indicators, slippage) {
     strategy: "V9_UNCHANGED",
     closedTradeMetrics: getMetrics(trades),
     volatilityDiagnostics: summarizeVolatilityDiagnostics([...trades, openTrade]),
+    volatilityOutcomes: summarizeVolatilityOutcomes(trades),
     openTrade,
     closedTrades: trades,
     lastClosedTrades: trades.slice(-10),
