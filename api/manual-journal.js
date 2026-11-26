@@ -230,7 +230,7 @@ module.exports = async function handler(req, res) {
     if (body.action === "open") {
       const validated = validateOpenPayload(body);
       if (!validated.ok) return res.status(400).json(validated);
-      const result = await mutate("open", [JSON.stringify(validated.trade)], process.env);
+      const result = await mutate("open", [JSON.stringify(validated.trade), "", ""], process.env);
       return res.status(result.ok ? 200 : 409).json(result);
     }
     if (body.action === "close") {
