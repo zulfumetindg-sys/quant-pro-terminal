@@ -103,6 +103,40 @@ async function loadSignal(force = false) {
   }
 }
 
+async function loadAIAnalysis() {
+  const button = $("aiAnalyzeBtn");
+  const output = $("aiAnalysisResults");
+  if (!latestSignal) {
+    output.textContent = "Önce XAUUSD teknik verisinin yüklenmesini bekle.";
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = "AI analiz ediyor…";
+  output.textContent = "Teknik veriler OpenAI tarafından yorumlanıyor. Bu işlem OpenAI API kullanımı oluşturabilir.";
+
+  try {
+    const response = await fetch("/api/ai-analysis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ signal: latestSignal })
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.message || payload.error || "AI analizi başarısız.");
+    }
+    output.textContent = payload.analysis +
+      "\\n\\nModel: " + payload.model +
+      "\\nKarar değiştirildi mi: Hayır" +
+      "\\nDurum: " + payload.executionStatus;
+  } catch (error) {
+    output.textContent = "AI analizi alınamadı: " + error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "AI teknik analizini çalıştır";
+  }
+}
+
 async function loadBacktest() {
   const button = $("backtestBtn");
   const output = $("backtestResults");
@@ -139,7 +173,7 @@ async function loadBacktest() {
 }
 
 $("refreshBtn").addEventListener("click", () => loadSignal());
-$("backtestBtn").addEventListener("click", loadBacktest);
+$("backtestBtn").addEventListener("click", loadBacktest);\n$("aiAnalyzeBtn").addEventListener("click", loadAIAnalysis);
 
 let installPrompt;
 window.addEventListener("beforeinstallprompt", event => {
