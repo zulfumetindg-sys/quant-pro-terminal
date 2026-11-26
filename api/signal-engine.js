@@ -362,6 +362,11 @@ async function getLatestQuote(key) {
       !Number.isFinite(price) || price <= 0) {
     throw new Error(body.message || "QUOTE_DATA_UNAVAILABLE");
   }
+  // A fresh last quote is not tradable when the provider says the market is closed.
+  // Fail closed if this required market-state field is absent or not explicitly true.
+  if (body.is_market_open !== true) {
+    throw new Error("MARKET_CLOSED_OR_STATUS_UNVERIFIED");
+  }
   if (!Number.isFinite(quoteTimestamp) || quoteTimestamp <= 0) {
     throw new Error("QUOTE_TIMESTAMP_UNAVAILABLE");
   }
