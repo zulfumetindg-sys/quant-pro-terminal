@@ -5,6 +5,7 @@ const TARGET_R = 2.0;
 const SPREAD_USD = 0.30;
 const SLIPPAGES = [0.10, 0.20];
 const MAX_HOLD_HOURS = 72;
+const MAX_ENTRY_DISTANCE_PERCENT = 0.10;
 const FORWARD_START = Date.parse("2026-11-26T20:00:00Z");
 
 const PERIODS = [
@@ -213,10 +214,23 @@ function getSignal(candles, h4, indicators, i, h4Index) {
   const atr = indicators.atr[i];
   if (!atr || !Number.isFinite(atr)) return null;
 
+  // Live engine rejects entries when the current quote is too far
+  // from the last completed H1 close. Historical tests use the next
+  // H1 open as a reproducible proxy for the quote at signal execution.
+  const nextOpen = candles[i + 1]?.open;
+  if (!Number.isFinite(nextOpen) || nextOpen <= 0) return null;
+
+  const entryDistancePercent =
+    Math.abs(nextOpen - candles[i].close) /
+    Math.abs(candles[i].close) * 100;
+
+  if (entryDistancePercent > MAX_ENTRY_DISTANCE_PERCENT) return null;
+
   return {
     side: h1Trend,
     atr,
-    reference: candles[i].close
+    reference: candles[i].close,
+    entryDistancePercent
   };
 }
 
@@ -582,7 +596,9 @@ module.exports = async function handler(req, res) {
           macd: "12/26/9 HISTOGRAM DIRECTION",
           stopLoss: "ATR14 x 1.5",
           takeProfit: "2.0R",
-          maxHoldingHours: MAX_HOLD_HOURS
+          maxHoldingHours: MAX_HOLD_HOURS,
+          maxEntryDistancePercent: MAX_ENTRY_DISTANCE_PERCENT,
+          historicalEntryDistanceProxy: "NEXT_H1_OPEN_VS_SIGNAL_H1_CLOSE"
         },
         results,
         persistence: "NOT_STORED_PERMANENTLY",
@@ -627,7 +643,9 @@ module.exports = async function handler(req, res) {
         takeProfit: "2.0R",
         signalReference: "LAST_COMPLETED_H1_CLOSE",
         entry: "NEXT_H1_OPEN_AFTER_SIGNAL",
-        maxHoldingHours: MAX_HOLD_HOURS
+        maxHoldingHours: MAX_HOLD_HOURS,
+        maxEntryDistancePercent: MAX_ENTRY_DISTANCE_PERCENT,
+        historicalEntryDistanceProxy: "NEXT_H1_OPEN_VS_SIGNAL_H1_CLOSE"
       },
       costModel: {
         method: "DIRECTIONAL_BID_ASK_APPROXIMATION",
