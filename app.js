@@ -103,40 +103,52 @@ async function loadSignal(force = false) {
   }
 }
 
-async function loadAIAnalysis() {
-  const button = $("aiAnalyzeBtn");
+function loadFreeAnalysis() {
   const output = $("aiAnalysisResults");
   if (!latestSignal) {
     output.textContent = "Önce XAUUSD teknik verisinin yüklenmesini bekle.";
     return;
   }
 
-  button.disabled = true;
-  button.textContent = "AI analiz ediyor…";
-  output.textContent = "Teknik veriler OpenAI tarafından yorumlanıyor. Bu işlem OpenAI API kullanımı oluşturabilir.";
+  const s = latestSignal;
+  const side = s.status || "WAIT";
+  const trend = value => value === "BUY" ? "Yukarı" : value === "SELL" ? "Aşağı" : "Belirsiz";
+  const reasonText = {
+    LIVE_QUOTE_UNAVAILABLE: "Canlı fiyat doğrulanamadı. Güvenilir fiyat olmadan sinyal üretilemez.",
+    INSUFFICIENT_H1_H4_DATA: "Tamamlanmış H1/H4 mum sayısı yetersiz.",
+    H1_H4_NOT_ALIGNED: "H1 ve H4 yönleri aynı değil. Zaman dilimleri uyuşmadığı için işlem açılmıyor.",
+    MACD_HISTOGRAM_NOT_CONFIRMED: "MACD histogramı seçilen yönü doğrulamıyor.",
+    ENTRY_TOO_FAR_FROM_PRICE: "Fiyat giriş referansından izin verilen %0,10 sınırından uzakta.",
+    ATR_UNAVAILABLE: "ATR verisi hesaplanamadı; zarar durdur ve hedef güvenilir biçimde belirlenemiyor."
+  };
 
-  try {
-    const response = await fetch("/api/ai-analysis", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ signal: latestSignal })
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload.ok) {
-      throw new Error(payload.message || payload.error || "AI analizi başarısız.");
+  const lines = [];
+  lines.push("ÜCRETSİZ KURAL TABANLI TEKNİK AÇIKLAMA");
+  lines.push("Karar: " + (side === "BUY" ? "AL" : side === "SELL" ? "SAT" : "İŞLEM YOK"));
+  lines.push("H1 trendi: " + trend(s.h1Trend) + " · H4 trendi: " + trend(s.h4Trend));
+
+  if (side === "BUY" || side === "SELL") {
+    lines.push("Trend uyumu: H1 ve H4 aynı yönde; motorun yön filtresi olumlu.");
+    if (Number.isFinite(Number(s.macdHistogram))) {
+      lines.push("MACD histogramı: " + s.macdHistogram + " · yön filtresi sinyal tarafını destekliyor.");
+    } else {
+      lines.push("MACD histogramı: veri yok.");
     }
-    output.textContent = payload.analysis +
-      "\n\nModel: " + payload.model +
-      "\nKarar değiştirildi mi: Hayır" +
-      "\nDurum: " + payload.executionStatus;
-  } catch (error) {
-    output.textContent = "AI analizi alınamadı: " + error.message;
-  } finally {
-    button.disabled = false;
-    button.textContent = "AI teknik analizini çalıştır";
+    lines.push("ATR(14): " + (s.atr == null ? "veri yok" : s.atr) + " · stop mesafesi volatiliteye göre hesaplandı.");
+    lines.push("Risk/getiri: " + (s.riskReward || "hesaplanamadı") + " · giriş mesafesi: " +
+      (s.entryDistancePercent == null ? "bilinmiyor" : s.entryDistancePercent + "%") + ".");
+    lines.push("Giriş: " + (s.entry ?? "—") + " · SL: " + (s.sl ?? "—") + " · TP: " + (s.tp ?? "—"));
+  } else {
+    lines.push("İşlem açılmama nedeni: " + (reasonText[s.reason] || s.reason || "Gerekli koşullar birlikte oluşmadı."));
+    if (s.entryDistancePercent != null) lines.push("Fiyat-giriş mesafesi: " + s.entryDistancePercent + "%.");
+    if (s.macdHistogram != null) lines.push("MACD histogramı: " + s.macdHistogram + ".");
   }
-}
 
+  lines.push("Geçmiş kazanma oranı: " + (s.historicalWinProbability || "UNAVAILABLE") + " · doğrulanmamış oran üretilmez.");
+  lines.push("Bu açıklama sabit teknik kurallardan oluşturulur; yapay zekâ değildir, harici servise bağlanmaz ve ücretsizdir.");
+  lines.push("RESEARCH_ONLY_NOT_TRADE_READY · Emir göndermez ve işlem kararını değiştirmez.");
+  output.textContent = lines.join("\\n");
+}
 async function loadBacktest() {
   const button = $("backtestBtn");
   const output = $("backtestResults");
@@ -173,7 +185,7 @@ async function loadBacktest() {
 }
 
 $("refreshBtn").addEventListener("click", () => loadSignal());
-$("backtestBtn").addEventListener("click", loadBacktest);\n$("aiAnalyzeBtn").addEventListener("click", loadAIAnalysis);
+$("backtestBtn").addEventListener("click", loadBacktest);\n$("aiAnalyzeBtn").addEventListener("click", loadFreeAnalysis);
 
 let installPrompt;
 window.addEventListener("beforeinstallprompt", event => {
