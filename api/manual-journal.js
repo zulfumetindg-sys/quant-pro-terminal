@@ -193,14 +193,18 @@ async function getState(env) {
   return parseRedisState(raw);
 }
 
+function buildMutationArguments(action, args) {
+  if (action === "open") return [action, args[0], "", "", String(MAX_TRADES)];
+  if (action === "close") return [action, ...args, String(MAX_TRADES)];
+  throw new Error("ACTION_INVALID");
+}
+
 async function mutate(action, args, env) {
   const result = await redisCommand("/eval", "POST", [
     MUTATE_SCRIPT,
     "1",
     JOURNAL_KEY,
-    action,
-    ...args,
-    String(MAX_TRADES)
+    ...buildMutationArguments(action, args)
   ], env);
   return typeof result === "string" ? JSON.parse(result) : result;
 }
@@ -230,7 +234,7 @@ module.exports = async function handler(req, res) {
     if (body.action === "open") {
       const validated = validateOpenPayload(body);
       if (!validated.ok) return res.status(400).json(validated);
-      const result = await mutate("open", [JSON.stringify(validated.trade), "", ""], process.env);
+      const result = await mutate("open", [JSON.stringify(validated.trade)], process.env);
       return res.status(result.ok ? 200 : 409).json(result);
     }
     if (body.action === "close") {
@@ -260,5 +264,6 @@ module.exports.__test = {
   validateOpenPayload,
   validateClosePayload,
   calculateRealizedR,
-  parseRedisState
+  parseRedisState,
+  buildMutationArguments
 };
