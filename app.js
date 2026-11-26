@@ -33,13 +33,19 @@ function renderSignal(s){
  box.innerHTML=html;
 }
 async function loadMarket(){
- const btn=document.getElementById("refreshBtn");btn.disabled=true;btn.textContent="Yükleniyor…";
- try{const r=await fetch("/api/market-data",{cache:"no-store"}),p=await r.json();if(!r.ok)throw new Error(p.error||"Piyasa verisi alınamadı");latestData=p.data||{};render();updateMarketStatus(p.successCount||0);document.querySelector(".connection").innerHTML="<i></i> VERİ KONTROL EDİLDİ";notice("ok","Piyasa veri servisi yanıt verdi","Başarılı sembol: "+(p.successCount||0)+" / 6. Altın sinyali ayrı olarak hesaplanır.");}
- catch(e){updateMarketStatus(0);notice("bad","Piyasa verisi alınamadı",e.message);}finally{btn.disabled=false;btn.textContent="↻ Yenile";}
+ latestData={};
+ for(const m of MARKETS) latestData[m.symbol]={status:"pending",error:m.symbol==="XAUUSD"?"Altın sinyali yükleniyor":"Şimdilik devre dışı — altın öncelikli düşük kota modu"};
+ render();
+ const status=document.querySelector(".status-text");
+ const detail=status&&status.parentElement.querySelector("small");
+ if(status)status.textContent="GOLD ONLY";
+ if(detail)detail.textContent="Düşük API kotası için yalnızca XAUUSD";
+ document.querySelector(".connection").innerHTML="<i></i> ALTIN ÖNCELİKLİ MOD";
+ notice("ok","API kotası koruma modu","Twelve Data kotasını tüketmemek için diğer 7 piyasa geçici olarak durduruldu. Yalnızca XAUUSD analiz ediliyor.");
 }
 async function loadSignal(){
  const btn=document.getElementById("signalBtn");btn.disabled=true;btn.textContent="Altın analizi yükleniyor…";
- try{const r=await fetch("/api/signal-engine",{cache:"no-store"}),p=await r.json();if(!r.ok||!p.ok)throw new Error(p.message||p.error||"Sinyal hesaplanamadı");latestSignal=p.signal;renderSignal(latestSignal);updateSignalStat(latestSignal);document.getElementById("signalMeta").textContent="Son hesaplama: "+(p.generatedAt||"—")+" · "+p.candleCount+" H1 mum / "+p.completedH4Count+" H4 mum";}
+ try{const r=await fetch("/api/signal-engine",{cache:"no-store"}),p=await r.json();if(!r.ok||!p.ok)throw new Error(p.message||p.error||"Sinyal hesaplanamadı");latestSignal=p.signal;renderSignal(latestSignal);updateSignalStat(latestSignal);if(p.quote&&Number.isFinite(Number(p.quote.price))){latestData.XAUUSD={status:"ok",price:Number(p.quote.price),timestamp:p.generatedAt};render();}document.getElementById("signalMeta").textContent="Son hesaplama: "+(p.generatedAt||"—")+" · "+p.candleCount+" H1 mum / "+p.completedH4Count+" H4 mum";}
  catch(e){updateSignalStat(null);document.getElementById("goldSignal").innerHTML='<p class="signal-error">'+esc(e.message)+'</p>';document.getElementById("signalMeta").textContent="Veri alınamadı";}
  finally{btn.disabled=false;btn.textContent="Altın sinyalini yenile";}
 }
@@ -52,10 +58,10 @@ async function loadBacktest(){
 document.querySelectorAll(".filter").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".filter").forEach(b=>b.classList.remove("active"));btn.classList.add("active");activeFilter=btn.dataset.filter;render();}));
 document.getElementById("connectBtn").addEventListener("click",async()=>{
  const b=document.getElementById("connectBtn");b.disabled=true;b.textContent="Bağlantı test ediliyor…";
- try{const r=await fetch("/api/provider-status",{cache:"no-store"}),p=await r.json();if(!r.ok||!p.ok)throw new Error(p.error||"Bağlantı testi başarısız");notice("ok","Twelve Data API anahtarı algılandı","Sunucu API anahtarını doğruladı. Fiyat ve sinyal yenileniyor.");await loadMarket();await loadSignal();}
+ try{const r=await fetch("/api/provider-status",{cache:"no-store"}),p=await r.json();if(!r.ok||!p.ok)throw new Error(p.error||"Bağlantı testi başarısız");notice("ok","Twelve Data API anahtarı algılandı","Sunucu API anahtarını doğruladı. Fiyat ve sinyal yenileniyor.");await loadSignal();}
  catch(e){notice("bad","Twelve Data bağlantısı başarısız",e.message);}finally{b.disabled=false;b.textContent="Veri bağlantısını test et";}
 });
-document.getElementById("refreshBtn").addEventListener("click",()=>{loadMarket();loadSignal();});
+document.getElementById("refreshBtn").addEventListener("click",()=>{loadSignal();});
 document.getElementById("signalBtn").addEventListener("click",loadSignal);
 document.getElementById("backtestBtn").addEventListener("click",loadBacktest);
 let installPrompt;
