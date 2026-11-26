@@ -440,3 +440,20 @@ test("WAIT responses retain volatility shock diagnostics", () => {
   assert.equal(signal.volatilityShock.available, true);
   assert.equal(signal.volatilityShock.blocking, false);
 });
+
+test("volatility outcome buckets report closed-trade performance without creating blocking thresholds", () => {
+  const trades = [
+    { volatilityShock: { ratio: 0.8 }, netR: 2 },
+    { volatilityShock: { ratio: 1.2 }, netR: -1 },
+    { volatilityShock: { ratio: 1.8 }, netR: 1 },
+    { volatilityShock: { ratio: 2.5 }, netR: -0.5 },
+    { volatilityShock: { ratio: 3.2 }, netR: 2 },
+    { netR: 5 }
+  ];
+  const summary = backtest.summarizeVolatilityOutcomes(trades);
+  assert.equal(summary.interpretation, "EXPLORATORY_DESCRIPTIVE_BINS_NOT_VALIDATED_FILTERS");
+  assert.deepEqual(summary.buckets.map(x => x.sampleCount), [1, 1, 1, 1, 1]);
+  assert.equal(summary.buckets[0].metrics.winRatePercent, 100);
+  assert.equal(summary.buckets[1].metrics.winRatePercent, 0);
+  assert.equal(summary.buckets[3].metrics.netProfitR, -0.5);
+});
