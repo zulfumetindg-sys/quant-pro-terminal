@@ -18,8 +18,18 @@ function validateOpenPayload(body, now = Date.now()) {
   if (typeof signal.signalId !== "string" || !/^[A-Za-z0-9:_-]{8,160}$/.test(signal.signalId)) {
     return { ok: false, error: "SIGNAL_ID_INVALID" };
   }
+  const idMatch = /^XAUUSD:(BUY|SELL):(\\d{13})$/.exec(signal.signalId);
+  if (!idMatch || idMatch[1] !== signal.status) return { ok: false, error: "SIGNAL_ID_INVALID" };
+  const candleClosedAt = Date.parse(signal.signalCandleClosedAt || "");
   const expiry = Date.parse(signal.signalValidUntil || "");
-  if (!Number.isFinite(expiry) || expiry <= now) return { ok: false, error: "SIGNAL_EXPIRED_OR_INVALID" };
+  const idTime = Number(idMatch[2]);
+  if (
+    !Number.isFinite(candleClosedAt) ||
+    candleClosedAt !== idTime ||
+    expiry !== candleClosedAt + 3600000 ||
+    candleClosedAt > now ||
+    expiry <= now
+  ) return { ok: false, error: "SIGNAL_EXPIRED_OR_INVALID" };
 
   const signalEntry = Number(signal.entry);
   const fillPrice = Number(body.fillPrice);
@@ -35,6 +45,11 @@ function validateOpenPayload(body, now = Date.now()) {
     ? stopLoss < fillPrice && takeProfit > fillPrice
     : stopLoss > fillPrice && takeProfit < fillPrice;
   if (!correctGeometry) return { ok: false, error: "FILL_PRICE_OUTSIDE_RISK_LEVELS" };
+
+  const fillDistancePercent = Math.abs(fillPrice - signalEntry) / signalEntry * 100;
+  if (!Number.isFinite(fillDistancePercent) || fillDistancePercent > 0.10) {
+    return { ok: false, error: "ACTUAL_FILL_TOO_FAR_FROM_SIGNAL", fillDistancePercent: Number.isFinite(fillDistancePercent) ? +fillDistancePercent.toFixed(4) : null };
+  }
 
   const risk = Math.abs(fillPrice - stopLoss);
   const reward = Math.abs(takeProfit - fillPrice);
@@ -55,6 +70,7 @@ function validateOpenPayload(body, now = Date.now()) {
       stopLoss,
       takeProfit,
       actualFillRiskReward: +rr.toFixed(3),
+      actualFillDistancePercent: +fillDistancePercent.toFixed(4),
       openedAt: new Date(now).toISOString(),
       status: "OPEN",
       costs: "NOT_INCLUDED",
