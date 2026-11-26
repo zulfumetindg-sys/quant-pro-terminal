@@ -148,3 +148,83 @@ test("live signal rejects a provider quote more than 0.10 percent from the compl
   assert.equal(signal.sl, undefined);
   assert.equal(signal.tp, undefined);
 });
+
+
+test("quote freshness requires last_quote_at and never falls back to interval timestamp", async () => {
+  const originalFetch = global.fetch;
+  const originalNow = Date.now;
+  const now = Date.UTC(2026, 10, 26, 20, 0, 0);
+  Date.now = () => now;
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      close: "2650.25",
+      timestamp: String(Math.floor(now / 1000)),
+      status: "ok"
+    })
+  });
+  try {
+    await assert.rejects(
+      live.getLatestQuote("test-key"),
+      /QUOTE_TIMESTAMP_UNAVAILABLE/
+    );
+  } finally {
+    global.fetch = originalFetch;
+    Date.now = originalNow;
+  }
+});
+
+test("fresh last_quote_at is accepted even when interval timestamp is old", async () => {
+  const originalFetch = global.fetch;
+  const originalNow = Date.now;
+  const now = Date.UTC(2026, 10, 26, 20, 0, 0);
+  Date.now = () => now;
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      close: "2650.25",
+      timestamp: String(Math.floor((now - 3600000) / 1000)),
+      last_quote_at: String(Math.floor((now - 30000) / 1000)),
+      status: "ok"
+    })
+  });
+  try {
+    const quote = await live.getLatestQuote("test-key");
+    assert.equal(quote.status, "ok");
+    assert.equal(quote.price, 2650.25);
+    assert.equal(quote.ageSeconds, 30);
+  } finally {
+    global.fetch = originalFetch;
+    Date.now = originalNow;
+  }
+});
+
+test("stale and future last_quote_at values are rejected", async () => {
+  const originalFetch = global.fetch;
+  const originalNow = Date.now;
+  const now = Date.UTC(2026, 10, 26, 20, 0, 0);
+  Date.now = () => now;
+  try {
+    for (const timestamp of [
+      String(Math.floor((now - 181000) / 1000)),
+      String(Math.floor((now + 1000) / 1000))
+    ]) {
+      global.fetch = async () => ({
+        ok: true,
+        json: async () => ({
+          close: "2650.25",
+          timestamp: String(Math.floor(now / 1000)),
+          last_quote_at: timestamp,
+          status: "ok"
+        })
+      });
+      await assert.rejects(
+        live.getLatestQuote("test-key"),
+        /QUOTE_STALE_OR_FUTURE/
+      );
+    }
+  } finally {
+    global.fetch = originalFetch;
+    Date.now = originalNow;
+  }
+});
