@@ -14,6 +14,10 @@ const grid=document.getElementById("marketGrid");
 let activeFilter="ALL";
 let latestData={};
 
+function escapeHtml(v){
+  return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
 function render(){
   const items=MARKETS.filter(m=>activeFilter==="ALL"||m.group===activeFilter);
   grid.innerHTML=items.map(m=>{
@@ -29,10 +33,6 @@ function render(){
       <div class="card-bottom"><span>RSI: —</span><b>ATR: —</b></div>
     </article>`;
   }).join("");
-}
-
-function escapeHtml(v){
-  return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
 render();
@@ -56,7 +56,7 @@ async function loadMarket(){
   btn.disabled=true;
   btn.innerHTML="<span>↻</span> Yükleniyor";
   try{
-    const response=await fetch("/.netlify/functions/market-data",{headers:{"Accept":"application/json"}});
+    const response=await fetch("/api/market-data",{headers:{"Accept":"application/json"}});
     const payload=await response.json();
     if(!response.ok)throw new Error(payload.error||"Piyasa verisi alınamadı.");
     latestData=payload.data||{};
@@ -76,7 +76,7 @@ async function testConnection(){
   btn.disabled=true;
   btn.textContent="Bağlantı test ediliyor…";
   try{
-    const r=await fetch("/.netlify/functions/provider-status",{headers:{"Accept":"application/json"}});
+    const r=await fetch("/api/provider-status",{headers:{"Accept":"application/json"}});
     const data=await r.json();
     if(!r.ok)throw new Error(data.error||"Bağlantı testi başarısız.");
     setNotice("ok","Twelve Data API anahtarı algılandı","Sunucu anahtarı görüyor. Sembol eşleştirmesi ve fiyat testi için Yenile'ye basın.");
