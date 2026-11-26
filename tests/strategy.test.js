@@ -196,7 +196,8 @@ test("quote freshness requires last_quote_at and never falls back to interval ti
     json: async () => ({
       close: "2650.25",
       timestamp: String(Math.floor(now / 1000)),
-      status: "ok"
+      status: "ok",
+      is_market_open: true
     })
   });
   try {
@@ -221,7 +222,8 @@ test("fresh last_quote_at is accepted even when interval timestamp is old", asyn
       close: "2650.25",
       timestamp: String(Math.floor((now - 3600000) / 1000)),
       last_quote_at: String(Math.floor((now - 30000) / 1000)),
-      status: "ok"
+      status: "ok",
+      is_market_open: true
     })
   });
   try {
@@ -229,6 +231,34 @@ test("fresh last_quote_at is accepted even when interval timestamp is old", asyn
     assert.equal(quote.status, "ok");
     assert.equal(quote.price, 2650.25);
     assert.equal(quote.ageSeconds, 30);
+  } finally {
+    global.fetch = originalFetch;
+    Date.now = originalNow;
+  }
+});
+
+test("closed or unverified market status fails closed", async () => {
+  const originalFetch = global.fetch;
+  const originalNow = Date.now;
+  const now = Date.UTC(2026, 10, 26, 20, 0, 0);
+  Date.now = () => now;
+  try {
+    for (const marketStatus of [false, undefined]) {
+      global.fetch = async () => ({
+        ok: true,
+        json: async () => ({
+          close: "2650.25",
+          timestamp: String(Math.floor(now / 1000)),
+          last_quote_at: String(Math.floor((now - 30000) / 1000)),
+          ...(marketStatus === undefined ? {} : { is_market_open: marketStatus }),
+          status: "ok"
+        })
+      });
+      await assert.rejects(
+        live.getLatestQuote("test-key"),
+        /MARKET_CLOSED_OR_STATUS_UNVERIFIED/
+      );
+    }
   } finally {
     global.fetch = originalFetch;
     Date.now = originalNow;
@@ -251,7 +281,8 @@ test("stale and future last_quote_at values are rejected", async () => {
           close: "2650.25",
           timestamp: String(Math.floor(now / 1000)),
           last_quote_at: timestamp,
-          status: "ok"
+          status: "ok",
+          is_market_open: true
         })
       });
       await assert.rejects(
