@@ -1,16 +1,16 @@
+
 const SYMBOL = "XAU/USD";
 const MARKET = "XAUUSD";
 
 const STOP_ATR = 1.5;
 const TARGET_R = 2.0;
+const MAX_ENTRY_DISTANCE_PERCENT = 0.10;
 
 function parseTime(value) {
   let s = String(value || "").trim();
-
   if (!/[zZ]|[+-]\d{2}:\d{2}$/.test(s)) {
     s = s.replace(" ", "T") + "Z";
   }
-
   return Date.parse(s);
 }
 
@@ -19,7 +19,6 @@ function normalizeCandles(values) {
 
   return values.map(c => {
     const time = parseTime(c.datetime);
-
     return {
       time,
       datetime: Number.isFinite(time)
@@ -40,21 +39,18 @@ function normalizeCandles(values) {
 
 function emaSeries(values, period) {
   const out = Array(values.length).fill(null);
-
   if (values.length < period) return out;
 
   let v = values.slice(0, period)
     .reduce((a, b) => a + b, 0) / period;
 
   out[period - 1] = v;
-
   const k = 2 / (period + 1);
 
   for (let i = period; i < values.length; i++) {
     v = values[i] * k + v * (1 - k);
     out[i] = v;
   }
-
   return out;
 }
 
@@ -69,7 +65,6 @@ function ema(values, period) {
   for (let i = period; i < values.length; i++) {
     v = values[i] * k + v * (1 - k);
   }
-
   return v;
 }
 
@@ -96,7 +91,6 @@ function aggregateH4(candles) {
           return false;
         }
       }
-
       return true;
     })
     .sort((a, b) => a[0] - b[0])
@@ -112,7 +106,6 @@ function aggregateH4(candles) {
 
 function calculateMACDHistogram(candles) {
   const close = candles.map(c => c.close);
-
   const e12 = emaSeries(close, 12);
   const e26 = emaSeries(close, 26);
 
@@ -123,7 +116,6 @@ function calculateMACDHistogram(candles) {
   );
 
   const signal = Array(close.length).fill(null);
-
   const firstMacd = 25;
   const firstSignal = firstMacd + 8;
 
@@ -136,7 +128,6 @@ function calculateMACDHistogram(candles) {
 
     value /= 9;
     signal[firstSignal] = value;
-
     const k = 2 / 10;
 
     for (let i = firstSignal + 1; i < close.length; i++) {
@@ -171,7 +162,6 @@ function calculateATR(candles, period = 14) {
   }
 
   const recent = ranges.slice(-period);
-
   return recent.reduce((a, b) => a + b, 0) / period;
 }
 
@@ -185,7 +175,6 @@ function analyzeTrend(candles, fastPeriod, slowPeriod) {
   }
 
   const close = candles.map(c => c.close);
-
   const fast = ema(close, fastPeriod);
   const slow = ema(close, slowPeriod);
 
@@ -204,8 +193,7 @@ function analyzeTrend(candles, fastPeriod, slowPeriod) {
     slow,
     price: close[close.length - 1],
     candleCount: candles.length,
-    lastCompletedCandle:
-      candles[candles.length - 1].datetime
+    lastCompletedCandle: candles[candles.length - 1].datetime
   };
 }
 
@@ -222,8 +210,17 @@ function createSignal(candles, h4Candles, currentPrice) {
     currentPrice,
     liveQuoteStatus: Number.isFinite(currentPrice)
       ? "OK"
-      : "UNAVAILABLE"
+      : "UNAVAILABLE",
+    maxEntryDistancePercent: MAX_ENTRY_DISTANCE_PERCENT
   };
+
+  if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
+    return {
+      ...base,
+      status: "WAIT",
+      reason: "LIVE_QUOTE_UNAVAILABLE"
+    };
+  }
 
   if (!h1.valid || !h4.valid) {
     return {
@@ -234,17 +231,13 @@ function createSignal(candles, h4Candles, currentPrice) {
   }
 
   const entry = h1.price;
-
-  const distance = Number.isFinite(currentPrice)
-    ? Math.abs(currentPrice - entry) / Math.abs(entry) * 100
-    : null;
+  const distance =
+    Math.abs(currentPrice - entry) / Math.abs(entry) * 100;
 
   const entryFields = {
     entry,
     entryReference: "LAST_COMPLETED_H1_CLOSE",
-    entryDistancePercent: distance === null
-      ? null
-      : Number(distance.toFixed(4))
+    entryDistancePercent: Number(distance.toFixed(4))
   };
 
   if (h1.trend === "WAIT" || h1.trend !== h4.trend) {
@@ -276,6 +269,18 @@ function createSignal(candles, h4Candles, currentPrice) {
     };
   }
 
+  if (distance > MAX_ENTRY_DISTANCE_PERCENT) {
+    return {
+      ...base,
+      ...entryFields,
+      status: "WAIT",
+      reason: "ENTRY_TOO_FAR_FROM_PRICE",
+      h1Trend: h1.trend,
+      h4Trend: h4.trend,
+      macdHistogram: Number(histogram.toFixed(5))
+    };
+  }
+
   const atr = calculateATR(candles);
 
   if (!atr || !Number.isFinite(atr)) {
@@ -288,7 +293,6 @@ function createSignal(candles, h4Candles, currentPrice) {
   }
 
   const side = h1.trend;
-
   const risk = Math.max(
     atr * STOP_ATR,
     Math.abs(entry) * 0.001
@@ -344,10 +348,7 @@ async function getLatestPrice(key) {
 
 module.exports = async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
-  res.setHeader(
-    "Content-Type",
-    "application/json; charset=utf-8"
-  );
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
 
   if (req.method !== "GET") {
     return res.status(405).json({
@@ -437,7 +438,7 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      engine: "QUANT PRO XAUUSD SIGNAL ENGINE V7",
+      engine: "QUANT PRO XAUUSD SIGNAL ENGINE V8",
       mode: "SIGNALS_ONLY",
       market: MARKET,
       symbol: SYMBOL,
@@ -455,6 +456,7 @@ module.exports = async function handler(req, res) {
         atr: 14,
         stopATR: STOP_ATR,
         targetR: TARGET_R,
+        maxEntryDistancePercent: MAX_ENTRY_DISTANCE_PERCENT,
         adxFilter: false
       },
       quote,
