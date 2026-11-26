@@ -147,7 +147,7 @@ function loadFreeAnalysis() {
   lines.push("Geçmiş kazanma oranı: " + (s.historicalWinProbability || "UNAVAILABLE") + " · doğrulanmamış oran üretilmez.");
   lines.push("Bu açıklama sabit teknik kurallardan oluşturulur; yapay zekâ değildir, harici servise bağlanmaz ve ücretsizdir.");
   lines.push("RESEARCH_ONLY_NOT_TRADE_READY · Emir göndermez ve işlem kararını değiştirmez.");
-  output.textContent = lines.join("\\n");
+  output.textContent = lines.join("\n");
 }
 async function loadBacktest() {
   const button = $("backtestBtn");
