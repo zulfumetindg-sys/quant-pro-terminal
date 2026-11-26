@@ -66,6 +66,20 @@ test("same-bar stop and target collision is resolved conservatively as stop loss
   assert.ok(trade.netR < 0);
 });
 
+test("stop gaps fill at the worse opening price instead of the stop level", () => {
+  const data = [
+    candle(0, 100, 1),
+    { time: 3600000, open: 100, high: 101, low: 99, close: 100 },
+    { time: 7200000, open: 95, high: 96, low: 94, close: 95 }
+  ];
+  const trade = backtest.calculateTrade(
+    data, 0, { side: "BUY", atr: 1 }, 0.1, 2, false
+  );
+  assert.equal(trade.exitReason, "STOP_LOSS");
+  assert.ok(trade.exit < trade.stopLoss);
+  assert.ok(trade.netR < -1);
+});
+
 test("metrics calculate win rate, profit factor, net R and drawdown deterministically", () => {
   const metrics = backtest.getMetrics([
     { netR: 2 }, { netR: -1 }, { netR: 1 }
