@@ -17,3 +17,11 @@ footer{display:flex;justify-content:space-between;gap:12px;color:#62738d;font-si
 .notice.ok{border-color:#24634f;background:linear-gradient(110deg,#142a25,#121e2a)}.notice.ok .notice-icon{border-color:#39c996;color:#39c996}.notice.bad{border-color:#68402f;background:linear-gradient(110deg,#2b201c,#171c29)}.notice.bad .notice-icon{border-color:#e49b68;color:#e49b68}
 .market-card .price.live{color:#f4f7fc}.market-card .price-error{font-size:11px;color:#d8a16e;margin:17px 0 4px}.market-card .price-stamp{font-size:9px;color:#6f819b}
 @media(max-width:600px){.intro-actions{flex-direction:column;align-items:stretch}.intro-actions button{width:100%}.intro{align-items:flex-start}}
+
+/* QUANT PRO XAUUSD signal panel */
+.signal-panel{margin:26px 0;padding:20px;border:1px solid #293b56;border-radius:16px;background:linear-gradient(145deg,#121f32,#101827)}
+.signal-content{padding:14px 0}.signal-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
+.signal-side{display:inline-flex;padding:8px 18px;border-radius:8px;font-weight:800;letter-spacing:.08em}.signal-side.buy{background:#123d35;color:#65e0b8}.signal-side.sell{background:#482628;color:#ff9b9b}.signal-side.wait{background:#3a3424;color:#e9cb78}
+.signal-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.signal-grid>div{padding:12px;border:1px solid #293b56;border-radius:10px;background:#0d1726;min-width:0}.signal-grid small{display:block;color:#91a1b8;font-size:11px;margin-bottom:7px}.signal-grid b{font-size:15px;color:#f2f5fb;overflow-wrap:anywhere}
+.signal-muted{font-size:12px;color:#9aabc1;line-height:1.6}.signal-error{color:#ffadad}.backtest-tools{border-top:1px solid #293b56;padding-top:16px;margin-top:14px}.backtest-results{font-size:12px;color:#b6c4d7;line-height:1.7;margin-top:12px}.backtest-row{display:flex;flex-wrap:wrap;gap:8px 16px;padding:10px 0;border-bottom:1px solid #293b56}.backtest-row b{color:#fff}.signal-panel button{cursor:pointer}
+@media(max-width:700px){.signal-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.signal-panel{padding:14px}}
