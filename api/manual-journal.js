@@ -26,7 +26,7 @@ function validateOpenPayload(body, now = Date.now()) {
   const stopLoss = Number(signal.sl);
   const takeProfit = Number(signal.tp);
   if (![signalEntry, fillPrice, stopLoss, takeProfit].every(Number.isFinite) ||
-      fillPrice <= 0 || stopLoss <= 0 || takeProfit <= 0) {
+      signalEntry <= 0 || fillPrice <= 0 || stopLoss <= 0 || takeProfit <= 0) {
     return { ok: false, error: "PRICE_FIELDS_INVALID" };
   }
 
@@ -150,7 +150,8 @@ elseif action == 'close' then
       end
       trade.exitPrice = exitPrice
       trade.closedAt = ARGV[3]
-      trade.realizedR = risk > 0 and math.floor((pnl / risk) * 10000 + 0.5) / 10000 or cjson.null
+      local rawR = risk > 0 and pnl / risk or nil
+      trade.realizedR = rawR and (rawR >= 0 and math.floor(rawR * 10000 + 0.5) / 10000 or math.ceil(rawR * 10000 - 0.5) / 10000) or cjson.null
       trade.status = 'CLOSED'
       found = true
       break
