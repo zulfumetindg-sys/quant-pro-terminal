@@ -415,6 +415,11 @@ function runBacktest(candles, h4, indicators, slippage, period) {
   };
 }
 
+function hasForwardWarmup(candles, forwardStart) {
+  return candles.length > 0 &&
+    candles[0].time <= forwardStart - 100 * 3600000;
+}
+
 function runForwardTest(candles, h4, indicators, slippage) {
   const trades = [];
   let openTrade = null;
@@ -576,8 +581,25 @@ module.exports = async function handler(req, res) {
         x => x.time >= FORWARD_START
       );
 
-      const warmupComplete =
-        candles[0].time <= FORWARD_START - 100 * 3600000;
+      const warmupComplete = hasForwardWarmup(candles, FORWARD_START);
+
+      // Do not publish forward-test metrics when the original warmup window
+      // has rolled out of the provider's limited historical candle window.
+      if (!warmupComplete) {
+        return res.status(422).json({
+          ok: false,
+          error: "FORWARD_TEST_WARMUP_INCOMPLETE",
+          mode: "OUT_OF_SAMPLE_FORWARD_TEST",
+          symbol: SYMBOL,
+          startTime: new Date(FORWARD_START).toISOString(),
+          firstAvailableCandle: new Date(candles[0].time).toISOString(),
+          requiredHistoryStart: new Date(FORWARD_START - 100 * 3600000).toISOString(),
+          historyStatus: "HISTORY_MAY_BE_TRUNCATED",
+          persistence: "NOT_STORED_PERMANENTLY",
+          executionStatus: "RESEARCH_ONLY_NOT_TRADE_READY",
+          warning: "Başlangıç öncesi 100 saatlik ısınma verisi sağlayıcının geçmiş mum sınırı içinde bulunamadı. Yanıltıcı ileri test sonucu üretilmedi."
+        });
+      }
 
       const results = SLIPPAGES.map(slippage =>
         runForwardTest(candles, h4, indicators, slippage)
@@ -695,5 +717,6 @@ module.exports = async function handler(req, res) {
 // Export pure strategy functions for the Node test runner. The default export remains the Vercel handler.
 module.exports.__test = {
   parseTime, emaSeries, ema, makeH4, trend, buildIndicators,
-  getMetrics, getSignal, calculateTrade, runBacktest, runForwardTest
+  getMetrics, getSignal, calculateTrade, runBacktest, runForwardTest,
+  hasForwardWarmup
 };
