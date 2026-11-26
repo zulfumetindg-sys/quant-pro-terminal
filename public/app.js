@@ -48,7 +48,11 @@ function renderSignal(signal) {
     '<div><small>Giriş mesafesi</small><b>' + (signal.entryDistancePercent == null ? "—" : esc(signal.entryDistancePercent) + "%") + '</b></div>' +
     '<div><small>Geçmiş kazanma oranı</small><b>' + esc(signal.historicalWinProbability || "UNAVAILABLE") + '</b></div>' +
     '<div><small>H1 / H4 trendi</small><b>' + trend(signal.h1Trend) + ' / ' + trend(signal.h4Trend) + '</b></div>' +
-    '</div>';
+    '<div><small>Son H1 volatilite / önceki 14 H1 ortalaması</small><b>' +
+      (signal.volatilityShock && signal.volatilityShock.available ? Number(signal.volatilityShock.ratio).toFixed(2) + 'x' : 'VERİ YOK') +
+    '</b></div>' +
+    '</div>' +
+    '<p class="signal-muted">Volatilite ölçümü yalnızca tanısaldır; doğrulanmış eşik bulunmadığı için tek başına AL/SAT kararını engellemez.</p>';
 
   html += '<p class="signal-muted">' + esc(signal.reason || signal.entryModelWarning || "Sinyal koşulları kontrol edildi.") + '</p>' +
     '<p class="risk-note">RESEARCH_ONLY_NOT_TRADE_READY · Bu sistem emir göndermez. Bağımsız ileri test tamamlanmadığı için kazanma olasılığı üretilmez.</p>';
@@ -141,6 +145,10 @@ function loadFreeAnalysis() {
   lines.push("ÜCRETSİZ KURAL TABANLI TEKNİK AÇIKLAMA");
   lines.push("Karar: " + (side === "BUY" ? "AL" : side === "SELL" ? "SAT" : "İŞLEM YOK"));
   lines.push("H1 trendi: " + trend(s.h1Trend) + " · H4 trendi: " + trend(s.h4Trend));
+  const shock = s.volatilityShock;
+  lines.push("Son H1 volatilite oranı: " +
+    (shock && shock.available ? shock.ratio + "x / önceki " + shock.baselinePeriod + " H1 ortalaması" : "hesaplanamadı") +
+    " · tanısal, işlem engeli değil.");
 
   if (side === "BUY" || side === "SELL") {
     lines.push("Trend uyumu: H1 ve H4 aynı yönde; motorun yön filtresi olumlu.");
