@@ -145,6 +145,8 @@ test("live engine rejects missing, future and stale completed H1 candle data", (
   assert.equal(live.checkLatestCompletedH1Freshness(stale, now).reason, "H1_CANDLES_STALE");
   assert.equal(live.checkLatestCompletedH1Freshness(future, now).reason, "H1_CANDLE_CLOSE_TIME_INVALID");
   assert.equal(live.checkLatestCompletedH1Freshness([], now).reason, "H1_CANDLES_UNAVAILABLE");
+  const expired = [candle(now - 2 * 3600000, 2600)];
+  assert.equal(live.checkLatestCompletedH1Freshness(expired, now).reason, "H1_CANDLES_STALE");
 });
 
 test("live signal identity is stable for one completed H1 setup and changes on the next H1 close", () => {
