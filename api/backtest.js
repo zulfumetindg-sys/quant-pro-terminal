@@ -1,10 +1,11 @@
 
-const SYMBOLS = {
-  EURUSD: "EUR/USD",
-  GBPUSD: "GBP/USD",
-  USDJPY: "USD/JPY",
-  USDTRY: "USD/TRY",
-  XAUUSD: "XAU/USD"
+const SYMBOL = "XAU/USD";
+const MARKET = "XAUUSD";
+
+const COST = {
+  spread: 0.30,
+  slippagePerSide: [0.10, 0.20],
+  commissionPerTrade: 0
 };
 
 function parseTime(value) {
@@ -13,6 +14,8 @@ function parseTime(value) {
 }
 
 function normalize(values) {
+  const now = Date.now();
+
   return values.map(c => ({
     time: parseTime(c.datetime),
     open: Number(c.open),
@@ -21,10 +24,12 @@ function normalize(values) {
     close: Number(c.close)
   })).filter(c =>
     Number.isFinite(c.time) &&
+    c.time + 3600000 <= now &&
     Number.isFinite(c.open) &&
     Number.isFinite(c.high) &&
     Number.isFinite(c.low) &&
-    Number.isFinite(c.close)
+    Number.isFinite(c.close) &&
+    c.high >= c.low
   ).sort((a, b) => a.time - b.time);
 }
 
@@ -80,11 +85,11 @@ function makeH4(candles) {
 
   return [...groups.entries()]
     .sort((a, b) => a[0] - b[0])
-    .filter(([, g]) => {
+    .filter(([start, g]) => {
       if (g.length !== 4) return false;
 
-      for (let i = 1; i < 4; i++) {
-        if (g[i].time - g[i - 1].time !== 3600000) {
+      for (let i = 0; i < 4; i++) {
+        if (g[i].time !== start + i * 3600000) {
           return false;
         }
       }
@@ -118,6 +123,67 @@ function trend(candles, index, fastPeriod, slowPeriod) {
   return "WAIT";
 }
 
+function calculateMetrics(trades, costPerTrade) {
+  const results = trades.map(t => ({
+    ...t,
+    costPrice: costPerTrade,
+    netR: t.grossR - costPerTrade / t.risk
+  }));
+
+  const wins = results.filter(t => t.netR > 0);
+  const losses = results.filter(t => t.netR < 0);
+
+  const grossProfitR = wins.reduce((s, t) => s + t.netR, 0);
+  const grossLossR = Math.abs(
+    losses.reduce((s, t) => s + t.netR, 0)
+  );
+
+  const netR = results.reduce((s, t) => s + t.netR, 0);
+
+  let equity = 0;
+  let peak = 0;
+  let maxDrawdownR = 0;
+
+  for (const t of results) {
+    equity += t.netR;
+    peak = Math.max(peak, equity);
+    maxDrawdownR = Math.max(
+      maxDrawdownR,
+      peak - equity
+    );
+  }
+
+  const count = results.length;
+  const enoughData = count >= 30;
+
+  return {
+    tradeCount: count,
+    winCount: wins.length,
+    lossCount: losses.length,
+    winRatePercent: enoughData
+      ? Number((wins.length / count * 100).toFixed(2))
+      : null,
+    profitFactor: grossLossR > 0
+      ? Number((grossProfitR / grossLossR).toFixed(3))
+      : null,
+    netProfitR: Number(netR.toFixed(2)),
+    maxDrawdownR: Number(maxDrawdownR.toFixed(2)),
+    averageR: count
+      ? Number((netR / count).toFixed(3))
+      : null,
+    insufficientSample: !enoughData,
+    lastTrades: results.slice(-10).map(t => ({
+      side: t.side,
+      entry: Number(t.entry.toFixed(3)),
+      exit: Number(t.exit.toFixed(3)),
+      grossR: Number(t.grossR.toFixed(3)),
+      costR: Number((t.costPrice / t.risk).toFixed(3)),
+      netR: Number(t.netR.toFixed(3)),
+      outcome: t.outcome
+    }))
+  };
+}
+
 function runBacktest(candles) {
   const h4 = makeH4(candles);
   const trades = [];
@@ -126,8 +192,7 @@ function runBacktest(candles) {
   let i = 60;
 
   while (i < candles.length - 2) {
-    const signalCandle = candles[i];
-    const signalCloseTime = signalCandle.time + 3600000;
+    const signalCloseTime = candles[i].time + 3600000;
 
     while (
       h4Index + 1 < h4.length &&
@@ -156,13 +221,14 @@ function runBacktest(candles) {
 
     const volatility = atr(candles, i);
 
-    if (!volatility || !Number.isFinite(volatility)) {
+    if (!volatility) {
       i++;
       continue;
     }
 
     const side = h1Trend;
     const entry = candles[i + 1].open;
+
     const risk = Math.max(
       volatility * 1.5,
       Math.abs(entry) * 0.001
@@ -193,7 +259,7 @@ function runBacktest(candles) {
         ? c.high >= tp
         : c.low <= tp;
 
-      // Aynı mumda SL ve TP görülürse SL önce kabul edilir.
+      // Aynı mumda SL ve TP: kötümser olarak SL önce.
       if (hitSL) {
         outcome = "LOSS";
         exitPrice = sl;
@@ -212,70 +278,52 @@ function runBacktest(candles) {
       exitIndex = j;
     }
 
-    const pnlR = side === "BUY"
+    const grossR = side === "BUY"
       ? (exitPrice - entry) / risk
       : (entry - exitPrice) / risk;
 
     trades.push({
       side,
       entry,
+      exit: exitPrice,
       sl,
       tp,
-      exit: exitPrice,
+      risk,
+      grossR,
       outcome,
-      pnlR: Number(pnlR.toFixed(3)),
       entryTime: new Date(candles[i + 1].time).toISOString(),
       exitTime: new Date(candles[exitIndex].time).toISOString()
     });
 
-    // Aynı anda birden fazla işlem açılmasını önle.
     i = Math.max(i + 1, exitIndex + 1);
   }
 
-  const wins = trades.filter(t => t.pnlR > 0);
-  const losses = trades.filter(t => t.pnlR < 0);
+  const gross = calculateMetrics(trades, 0);
 
-  const grossProfit = wins.reduce((s, t) => s + t.pnlR, 0);
-  const grossLoss = Math.abs(
-    losses.reduce((s, t) => s + t.pnlR, 0)
-  );
+  const scenarios = COST.slippagePerSide.map(slippage => {
+    const totalCost =
+      COST.spread +
+      (slippage * 2) +
+      COST.commissionPerTrade;
 
-  const totalR = trades.reduce((s, t) => s + t.pnlR, 0);
-
-  let equity = 0;
-  let peak = 0;
-  let maxDrawdownR = 0;
-
-  for (const t of trades) {
-    equity += t.pnlR;
-    peak = Math.max(peak, equity);
-    maxDrawdownR = Math.max(maxDrawdownR, peak - equity);
-  }
-
-  const count = trades.length;
-  const enoughData = count >= 30;
+    return {
+      name: `SPREAD_0.30_SLIPPAGE_${slippage.toFixed(2)}_EACH_SIDE`,
+      assumptions: {
+        spread: COST.spread,
+        slippagePerSide: slippage,
+        commissionPerTrade: COST.commissionPerTrade,
+        totalCostPerTrade: Number(totalCost.toFixed(3))
+      },
+      metrics: calculateMetrics(trades, totalCost)
+    };
+  });
 
   return {
-    status: enoughData ? "CALCULATED" : "INSUFFICIENT_SAMPLE",
-    tradeCount: count,
-    winCount: wins.length,
-    lossCount: losses.length,
-    winRatePercent: enoughData
-      ? Number((wins.length / count * 100).toFixed(2))
-      : null,
-    profitFactor: grossLoss > 0
-      ? Number((grossProfit / grossLoss).toFixed(3))
-      : null,
-    netProfitR: Number(totalR.toFixed(2)),
-    maxDrawdownR: Number(maxDrawdownR.toFixed(2)),
-    averageR: count
-      ? Number((totalR / count).toFixed(3))
-      : null,
-    grossProfitR: Number(grossProfit.toFixed(2)),
-    grossLossR: Number(grossLoss.toFixed(2)),
-    costModel: "NO_SPREAD_NO_COMMISSION_NO_SLIPPAGE",
+    tradeCount: trades.length,
+    grossResults: gross,
+    costScenarios: scenarios,
     sampleRequirement: 30,
-    lastTrades: trades.slice(-20)
+    costWarning: "FIXED_SPREAD_ASSUMPTION_NOT_LIVE_XM_HISTORY"
   };
 }
 
@@ -284,22 +332,16 @@ module.exports = async function handler(req, res) {
     "Cache-Control",
     "public, s-maxage=3600, stale-while-revalidate=300"
   );
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
+
+  res.setHeader(
+    "Content-Type",
+    "application/json; charset=utf-8"
+  );
 
   if (req.method !== "GET") {
     return res.status(405).json({
       ok: false,
       error: "METHOD_NOT_ALLOWED"
-    });
-  }
-
-  const market = String(req.query.market || "EURUSD").toUpperCase();
-
-  if (!SYMBOLS[market]) {
-    return res.status(400).json({
-      ok: false,
-      error: "INVALID_MARKET",
-      allowedMarkets: Object.keys(SYMBOLS)
     });
   }
 
@@ -313,15 +355,20 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const url = new URL("https://api.twelvedata.com/time_series");
-    url.searchParams.set("symbol", SYMBOLS[market]);
+    const url = new URL(
+      "https://api.twelvedata.com/time_series"
+    );
+
+    url.searchParams.set("symbol", SYMBOL);
     url.searchParams.set("interval", "1h");
     url.searchParams.set("outputsize", "5000");
     url.searchParams.set("timezone", "UTC");
     url.searchParams.set("order", "ASC");
 
     const response = await fetch(url, {
-      headers: { Authorization: `apikey ${key}` }
+      headers: {
+        Authorization: `apikey ${key}`
+      }
     });
 
     const body = await response.json();
@@ -334,7 +381,7 @@ module.exports = async function handler(req, res) {
       return res.status(502).json({
         ok: false,
         error: "HISTORICAL_DATA_ERROR",
-        message: body.message || "Geçmiş mum verisi alınamadı."
+        message: body.message || "Geçmiş altın verisi alınamadı."
       });
     }
 
@@ -353,9 +400,9 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      engine: "QUANT PRO BACKTEST V1",
-      market,
-      symbol: SYMBOLS[market],
+      engine: "QUANT PRO XAUUSD BACKTEST V2",
+      market: MARKET,
+      symbol: SYMBOL,
       timeframe: "H1 + COMPLETED H4",
       provider: "Twelve Data",
       candleCount: candles.length,
@@ -368,6 +415,12 @@ module.exports = async function handler(req, res) {
         takeProfit: "1.8R",
         entry: "NEXT H1 CANDLE OPEN",
         maxHoldingHours: 72
+      },
+      costModel: {
+        spreadUSD: COST.spread,
+        slippageScenariosUSDPerSide: COST.slippagePerSide,
+        commissionPerTradeUSD: COST.commissionPerTrade,
+        note: "Approximate fixed-cost stress test; not tick-level XM execution simulation."
       },
       report,
       generatedAt: new Date().toISOString()
