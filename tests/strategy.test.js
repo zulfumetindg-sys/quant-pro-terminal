@@ -111,6 +111,42 @@ test("live signal entry and risk levels are based on the current provider quote 
   assert.equal(signal.executionStatus, "RESEARCH_ONLY_NOT_TRADE_READY");
 });
 
+test("live signal and historical engine agree on identical completed H1/H4 data and entry quote", () => {
+  const base = Date.UTC(2026, 0, 5, 0, 0, 0);
+  const data = Array.from({ length: 500 }, (_, i) =>
+    candle(base + i * 3600000, 2300 + i * 0.08 + 5 * Math.sin(i / 11), 1)
+  );
+
+  // The signal is confirmed at H1 candle 495 close; candle 496 open
+  // is the common reproducible entry-price reference for both engines.
+  const signalIndex = 495;
+  const liveHistory = data.slice(0, signalIndex + 1);
+  const liveH4 = live.aggregateH4(liveHistory);
+  const indicators = backtest.buildIndicators(data);
+  const h4 = backtest.makeH4(data);
+  const signalCloseTime = data[signalIndex].time + 3600000;
+  const h4Index = h4.findIndex(x => x.end === signalCloseTime);
+  const quote = data[signalIndex + 1].open;
+
+  assert.ok(h4Index >= 19);
+  const liveSignal = live.createSignal(liveHistory, liveH4, quote);
+  const historicalSignal = backtest.getSignal(
+    data, h4, indicators, signalIndex, h4Index
+  );
+
+  assert.equal(
+    liveSignal.status,
+    historicalSignal ? historicalSignal.side : "WAIT"
+  );
+  if (historicalSignal) {
+    assert.equal(liveSignal.entry, quote);
+    assert.equal(liveSignal.riskReward, "1:2.0");
+    assert.ok(Math.abs(liveSignal.atr - historicalSignal.atr) < 1e-9);
+  } else {
+    assert.equal(liveSignal.status, "WAIT");
+  }
+});
+
 test("live and backtest H4 aggregation agree on identical candle history", () => {
   const base = Date.UTC(2026, 0, 5, 0, 0, 0);
   const data = Array.from({ length: 400 }, (_, i) =>
