@@ -18,7 +18,7 @@ function validateOpenPayload(body, now = Date.now()) {
   if (typeof signal.signalId !== "string" || !/^[A-Za-z0-9:_-]{8,160}$/.test(signal.signalId)) {
     return { ok: false, error: "SIGNAL_ID_INVALID" };
   }
-  const idMatch = /^XAUUSD:(BUY|SELL):(\\d{13})$/.exec(signal.signalId);
+  const idMatch = /^XAUUSD:(BUY|SELL):(\d{13})$/.exec(signal.signalId);
   if (!idMatch || idMatch[1] !== signal.status) return { ok: false, error: "SIGNAL_ID_INVALID" };
   const candleClosedAt = Date.parse(signal.signalCandleClosedAt || "");
   const expiry = Date.parse(signal.signalValidUntil || "");
