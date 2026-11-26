@@ -108,6 +108,7 @@ async function loadSignal(force = false) {
 
     latestSignal = payload.signal || null;
     renderSignal(latestSignal);
+    renderManualJournal();
     const online = payload.quote && payload.quote.status === "ok";
     updateStats(latestSignal, online);
 
@@ -298,7 +299,7 @@ async function recordManualOpen() {
     return;
   }
   try {
-    const payload = await journalRequest("POST", { action: "open", signal: latestSignal, fillPrice });
+    const payload = await journalRequest("POST", { action: "open", signal: { ...latestSignal, symbol: "XAUUSD" }, fillPrice });
     journalState = payload.state;
     $("journalFillPrice").value = "";
     $("journalStatus").textContent = "Manuel açılış kaydı sunucuya kaydedildi.";
