@@ -505,6 +505,7 @@ function runForwardTest(candles, h4, indicators, slippage) {
     strategy: "V9_UNCHANGED",
     closedTradeMetrics: getMetrics(trades),
     openTrade,
+    closedTrades: trades,
     lastClosedTrades: trades.slice(-10),
     status: trades.length < 30
       ? "COLLECTING_MINIMUM_30_CLOSED_TRADES"
