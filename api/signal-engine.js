@@ -548,7 +548,7 @@ module.exports = async function handler(req, res) {
         ageSeconds: h1CandleFreshness.ageMs === null
           ? null
           : Math.floor(h1CandleFreshness.ageMs / 1000),
-        maxAgeSeconds: 7200
+        maxAgeSeconds: 3600
       },
       h1: analyzeTrend(candles, 20, 50),
       h4: analyzeTrend(h4Candles, 8, 20),
