@@ -3,9 +3,9 @@ const SYMBOL = "XAU/USD";
 const MARKET = "XAUUSD";
 
 const COST = {
-  spread: 0.30,
-  slippagePerSide: [0.10, 0.20],
-  commissionPerTrade: 0
+  spreadUSD: 0.30,
+  slippagePerSideUSD: [0.10, 0.20],
+  commissionPerTradeUSD: 0
 };
 
 function parseTime(value) {
@@ -25,10 +25,7 @@ function normalize(values) {
   })).filter(c =>
     Number.isFinite(c.time) &&
     c.time + 3600000 <= now &&
-    Number.isFinite(c.open) &&
-    Number.isFinite(c.high) &&
-    Number.isFinite(c.low) &&
-    Number.isFinite(c.close) &&
+    [c.open, c.high, c.low, c.close].every(Number.isFinite) &&
     c.high >= c.low
   ).sort((a, b) => a.time - b.time);
 }
@@ -36,16 +33,16 @@ function normalize(values) {
 function ema(values, period) {
   if (values.length < period) return null;
 
-  let e = values.slice(0, period)
+  let result = values.slice(0, period)
     .reduce((a, b) => a + b, 0) / period;
 
   const k = 2 / (period + 1);
 
   for (let i = period; i < values.length; i++) {
-    e = values[i] * k + e * (1 - k);
+    result = values[i] * k + result * (1 - k);
   }
 
-  return e;
+  return result;
 }
 
 function atr(candles, end, period = 14) {
@@ -85,24 +82,20 @@ function makeH4(candles) {
 
   return [...groups.entries()]
     .sort((a, b) => a[0] - b[0])
-    .filter(([start, g]) => {
-      if (g.length !== 4) return false;
+    .filter(([start, group]) => {
+      if (group.length !== 4) return false;
 
-      for (let i = 0; i < 4; i++) {
-        if (g[i].time !== start + i * 3600000) {
-          return false;
-        }
-      }
-
-      return true;
+      return group.every((c, i) =>
+        c.time === start + i * 3600000
+      );
     })
-    .map(([start, g]) => ({
+    .map(([start, group]) => ({
       time: start,
       end: start + 4 * 3600000,
-      open: g[0].open,
-      high: Math.max(...g.map(x => x.high)),
-      low: Math.min(...g.map(x => x.low)),
-      close: g[3].close
+      open: group[0].open,
+      high: Math.max(...group.map(c => c.high)),
+      low: Math.min(...group.map(c => c.low)),
+      close: group[3].close
     }));
 }
 
@@ -117,76 +110,62 @@ function trend(candles, index, fastPeriod, slowPeriod) {
   const slow = ema(closes, slowPeriod);
 
   if (fast === null || slow === null) return null;
-
   if (fast > slow) return "BUY";
   if (fast < slow) return "SELL";
+
   return "WAIT";
 }
 
-function calculateMetrics(trades, costPerTrade) {
-  const results = trades.map(t => ({
-    ...t,
-    costPrice: costPerTrade,
-    netR: t.grossR - costPerTrade / t.risk
-  }));
+function calculateMetrics(trades) {
+  const wins = trades.filter(t => t.netR > 0);
+  const losses = trades.filter(t => t.netR < 0);
 
-  const wins = results.filter(t => t.netR > 0);
-  const losses = results.filter(t => t.netR < 0);
-
-  const grossProfitR = wins.reduce((s, t) => s + t.netR, 0);
-  const grossLossR = Math.abs(
-    losses.reduce((s, t) => s + t.netR, 0)
-  );
-
-  const netR = results.reduce((s, t) => s + t.netR, 0);
+  const profit = wins.reduce((s, t) => s + t.netR, 0);
+  const loss = Math.abs(losses.reduce((s, t) => s + t.netR, 0));
+  const net = trades.reduce((s, t) => s + t.netR, 0);
 
   let equity = 0;
   let peak = 0;
-  let maxDrawdownR = 0;
+  let maxDD = 0;
 
-  for (const t of results) {
+  for (const t of trades) {
     equity += t.netR;
     peak = Math.max(peak, equity);
-    maxDrawdownR = Math.max(
-      maxDrawdownR,
-      peak - equity
-    );
+    maxDD = Math.max(maxDD, peak - equity);
   }
 
-  const count = results.length;
-  const enoughData = count >= 30;
+  const count = trades.length;
 
   return {
     tradeCount: count,
     winCount: wins.length,
     lossCount: losses.length,
-    winRatePercent: enoughData
+    winRatePercent: count >= 30
       ? Number((wins.length / count * 100).toFixed(2))
       : null,
-    profitFactor: grossLossR > 0
-      ? Number((grossProfitR / grossLossR).toFixed(3))
+    profitFactor: loss > 0
+      ? Number((profit / loss).toFixed(3))
       : null,
-    netProfitR: Number(netR.toFixed(2)),
-    maxDrawdownR: Number(maxDrawdownR.toFixed(2)),
+    netProfitR: Number(net.toFixed(2)),
+    maxDrawdownR: Number(maxDD.toFixed(2)),
     averageR: count
-      ? Number((netR / count).toFixed(3))
+      ? Number((net / count).toFixed(3))
       : null,
-    insufficientSample: !enoughData,
-    lastTrades: results.slice(-10).map(t => ({
+    insufficientSample: count < 30,
+    lastTrades: trades.slice(-10).map(t => ({
       side: t.side,
       entry: Number(t.entry.toFixed(3)),
       exit: Number(t.exit.toFixed(3)),
-      grossR: Number(t.grossR.toFixed(3)),
-      costR: Number((t.costPrice / t.risk).toFixed(3)),
       netR: Number(t.netR.toFixed(3)),
-      outcome: t.outcome
+      exitReason: t.exitReason
     }))
   };
 }
 
-function runBacktest(candles) {
+function runScenario(candles, slippage) {
   const h4 = makeH4(candles);
   const trades = [];
+  const halfSpread = COST.spreadUSD / 2;
 
   let h4Index = -1;
   let i = 60;
@@ -227,23 +206,28 @@ function runBacktest(candles) {
     }
 
     const side = h1Trend;
-    const entry = candles[i + 1].open;
+    const next = candles[i + 1];
 
-    const risk = Math.max(
+    const riskDistance = Math.max(
       volatility * 1.5,
-      Math.abs(entry) * 0.001
+      Math.abs(next.open) * 0.001
     );
 
+    // OHLC verisi orta fiyat kabul edilerek yaklaşık bid/ask uygulanır.
+    const entry = side === "BUY"
+      ? next.open + halfSpread + slippage
+      : next.open - halfSpread - slippage;
+
     const sl = side === "BUY"
-      ? entry - risk
-      : entry + risk;
+      ? entry - riskDistance
+      : entry + riskDistance;
 
     const tp = side === "BUY"
-      ? entry + risk * 1.8
-      : entry - risk * 1.8;
+      ? entry + riskDistance * 1.8
+      : entry - riskDistance * 1.8;
 
-    let outcome = "TIME_EXIT";
-    let exitPrice = null;
+    let exit = null;
+    let exitReason = "TIME_EXIT";
     let exitIndex = i + 1;
 
     const maxHold = Math.min(i + 72, candles.length - 1);
@@ -251,79 +235,84 @@ function runBacktest(candles) {
     for (let j = i + 1; j <= maxHold; j++) {
       const c = candles[j];
 
+      // BUY pozisyonu bid fiyatından kapatılır.
+      // SELL pozisyonu ask fiyatından kapatılır.
+      const bidLow = c.low - halfSpread;
+      const bidHigh = c.high - halfSpread;
+      const askLow = c.low + halfSpread;
+      const askHigh = c.high + halfSpread;
+
       const hitSL = side === "BUY"
-        ? c.low <= sl
-        : c.high >= sl;
+        ? bidLow <= sl
+        : askHigh >= sl;
 
       const hitTP = side === "BUY"
-        ? c.high >= tp
-        : c.low <= tp;
+        ? bidHigh >= tp
+        : askLow <= tp;
 
-      // Aynı mumda SL ve TP: kötümser olarak SL önce.
+      // Aynı mumda SL ve TP: kötümser varsayım, SL önce.
       if (hitSL) {
-        outcome = "LOSS";
-        exitPrice = sl;
+        exit = side === "BUY"
+          ? sl - slippage
+          : sl + slippage;
+
+        exitReason = "STOP_LOSS";
         exitIndex = j;
         break;
       }
 
       if (hitTP) {
-        outcome = "WIN";
-        exitPrice = tp;
+        exit = side === "BUY"
+          ? tp - slippage
+          : tp + slippage;
+
+        exitReason = "TAKE_PROFIT";
         exitIndex = j;
         break;
       }
 
-      exitPrice = c.close;
+      exit = side === "BUY"
+        ? c.close - halfSpread - slippage
+        : c.close + halfSpread + slippage;
+
       exitIndex = j;
     }
 
-    const grossR = side === "BUY"
-      ? (exitPrice - entry) / risk
-      : (entry - exitPrice) / risk;
+    if (exit === null) {
+      i++;
+      continue;
+    }
+
+    const priceProfit = side === "BUY"
+      ? exit - entry
+      : entry - exit;
+
+    const commission = COST.commissionPerTradeUSD;
+    const netR = (priceProfit - commission) / riskDistance;
 
     trades.push({
       side,
       entry,
-      exit: exitPrice,
-      sl,
-      tp,
-      risk,
-      grossR,
-      outcome,
-      entryTime: new Date(candles[i + 1].time).toISOString(),
+      exit,
+      risk: riskDistance,
+      netR,
+      exitReason,
+      entryTime: new Date(next.time).toISOString(),
       exitTime: new Date(candles[exitIndex].time).toISOString()
     });
 
     i = Math.max(i + 1, exitIndex + 1);
   }
 
-  const gross = calculateMetrics(trades, 0);
-
-  const scenarios = COST.slippagePerSide.map(slippage => {
-    const totalCost =
-      COST.spread +
-      (slippage * 2) +
-      COST.commissionPerTrade;
-
-    return {
-      name: `SPREAD_0.30_SLIPPAGE_${slippage.toFixed(2)}_EACH_SIDE`,
-      assumptions: {
-        spread: COST.spread,
-        slippagePerSide: slippage,
-        commissionPerTrade: COST.commissionPerTrade,
-        totalCostPerTrade: Number(totalCost.toFixed(3))
-      },
-      metrics: calculateMetrics(trades, totalCost)
-    };
-  });
-
   return {
-    tradeCount: trades.length,
-    grossResults: gross,
-    costScenarios: scenarios,
-    sampleRequirement: 30,
-    costWarning: "FIXED_SPREAD_ASSUMPTION_NOT_LIVE_XM_HISTORY"
+    assumptions: {
+      spreadUSD: COST.spreadUSD,
+      slippagePerSideUSD: slippage,
+      commissionPerTradeUSD: COST.commissionPerTrade,
+      estimatedSpreadPlusSlippageUSD:
+        Number((COST.spreadUSD + 2 * slippage).toFixed(3))
+    },
+    metrics: calculateMetrics(trades)
   };
 }
 
@@ -396,11 +385,15 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    const report = runBacktest(candles);
+    const scenarios = COST.slippagePerSideUSD.map(slippage => ({
+      name: `SLIPPAGE_${slippage.toFixed(2)}_PER_SIDE`,
+      ...runScenario(candles, slippage)
+    }));
 
     return res.status(200).json({
       ok: true,
-      engine: "QUANT PRO XAUUSD BACKTEST V2",
+      engine: "QUANT PRO XAUUSD BACKTEST V3",
+      mode: "SIGNALS_ONLY",
       market: MARKET,
       symbol: SYMBOL,
       timeframe: "H1 + COMPLETED H4",
@@ -408,6 +401,7 @@ module.exports = async function handler(req, res) {
       candleCount: candles.length,
       firstCandle: new Date(candles[0].time).toISOString(),
       lastCandle: new Date(candles[candles.length - 1].time).toISOString(),
+
       strategy: {
         h1: "EMA20 / EMA50",
         h4: "EMA8 / EMA20",
@@ -416,13 +410,22 @@ module.exports = async function handler(req, res) {
         entry: "NEXT H1 CANDLE OPEN",
         maxHoldingHours: 72
       },
+
       costModel: {
-        spreadUSD: COST.spread,
-        slippageScenariosUSDPerSide: COST.slippagePerSide,
+        method: "DIRECTIONAL_BID_ASK_APPROXIMATION",
+        ohlcAssumedMidPrice: true,
+        spreadUSD: COST.spreadUSD,
+        slippagePerSideUSD: COST.slippagePerSideUSD,
         commissionPerTradeUSD: COST.commissionPerTrade,
-        note: "Approximate fixed-cost stress test; not tick-level XM execution simulation."
+        historicalXMSpreadAvailable: false,
+        commissionVerified: false,
+        note: "Fixed spread approximation. Not historical XM bid/ask or tick-level execution data."
       },
-      report,
+
+      scenarios,
+      sampleRequirement: 30,
+      executionStatus: "NOT_TRADE_READY",
+      warning: "Backtest results are historical simulations, not guaranteed future performance.",
       generatedAt: new Date().toISOString()
     });
 
