@@ -120,3 +120,31 @@ test("live and backtest H4 aggregation agree on identical candle history", () =>
   const testH4 = backtest.makeH4(data).map(x => [x.time, x.open, x.high, x.low, x.close]);
   assert.deepEqual(liveH4, testH4);
 });
+
+
+test("missing or stale quote timestamp fails closed and cannot create a trade signal", () => {
+  const base = Date.UTC(2026, 0, 5, 0, 0, 0);
+  const data = Array.from({ length: 500 }, (_, i) =>
+    candle(base + i * 3600000, 2000 + i * 0.25, 0.8)
+  );
+  const h4 = live.aggregateH4(data);
+  const signal = live.createSignal(data, h4, null);
+  assert.equal(signal.status, "WAIT");
+  assert.equal(signal.reason, "LIVE_QUOTE_UNAVAILABLE");
+  assert.equal(signal.sl, undefined);
+  assert.equal(signal.tp, undefined);
+});
+
+test("live signal rejects a provider quote more than 0.10 percent from the completed H1 close", () => {
+  const base = Date.UTC(2026, 0, 5, 0, 0, 0);
+  const data = Array.from({ length: 500 }, (_, i) =>
+    candle(base + i * 3600000, 2000 + i * 0.25, 0.8)
+  );
+  const h4 = live.aggregateH4(data);
+  const distantQuote = data[data.length - 1].close * 1.01;
+  const signal = live.createSignal(data, h4, distantQuote);
+  assert.equal(signal.status, "WAIT");
+  assert.equal(signal.reason, "ENTRY_TOO_FAR_FROM_PRICE");
+  assert.equal(signal.sl, undefined);
+  assert.equal(signal.tp, undefined);
+});

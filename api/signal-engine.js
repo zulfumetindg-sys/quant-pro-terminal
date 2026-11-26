@@ -5,7 +5,8 @@ const MARKET = "XAUUSD";
 const STOP_ATR = 1.5;
 const TARGET_R = 2.0;
 const MAX_ENTRY_DISTANCE_PERCENT = 0.10;
-const CACHE_TTL_MS = 60000;
+const CACHE_TTL_MS = 30000;
+const MAX_QUOTE_AGE_MS = 180000;
 let cachedPayload = null;
 let cachedAt = 0;
 
@@ -342,24 +343,40 @@ function createSignal(candles, h4Candles, currentPrice) {
   };
 }
 
-async function getLatestPrice(key) {
-  const url = new URL("https://api.twelvedata.com/price");
+async function getLatestQuote(key) {
+  const url = new URL("https://api.twelvedata.com/quote");
   url.searchParams.set("symbol", SYMBOL);
+  url.searchParams.set("interval", "1min");
+  url.searchParams.set("timezone", "UTC");
 
   const response = await fetch(url, {
-    headers: {
-      Authorization: `apikey ${key}`
-    }
+    headers: { Authorization: `apikey ${key}` }
   });
-
   const body = await response.json();
-  const price = Number(body.price);
+  const price = Number(body.close);
+  const quoteTimestamp = Number(body.last_quote_at || body.timestamp);
 
-  if (!response.ok || !Number.isFinite(price) || price <= 0) {
-    throw new Error(body.message || "LIVE_PRICE_UNAVAILABLE");
+  if (!response.ok || body.status === "error" ||
+      !Number.isFinite(price) || price <= 0) {
+    throw new Error(body.message || "QUOTE_DATA_UNAVAILABLE");
+  }
+  if (!Number.isFinite(quoteTimestamp) || quoteTimestamp <= 0) {
+    throw new Error("QUOTE_TIMESTAMP_UNAVAILABLE");
   }
 
-  return price;
+  const ageMs = Date.now() - quoteTimestamp * 1000;
+  if (ageMs < 0 || ageMs > MAX_QUOTE_AGE_MS) {
+    throw new Error("QUOTE_STALE_OR_FUTURE");
+  }
+
+  return {
+    status: "ok",
+    price,
+    timestamp: new Date(quoteTimestamp * 1000).toISOString(),
+    ageSeconds: Math.floor(ageMs / 1000),
+    freshness: "VERIFIED_WITHIN_180_SECONDS",
+    source: "TWELVE_DATA_QUOTE_1MIN"
+  };
 }
 
 module.exports = async function handler(req, res) {
@@ -376,7 +393,15 @@ module.exports = async function handler(req, res) {
   const key = process.env.TWELVE_DATA_API_KEY;
 
   if (cachedPayload && Date.now() - cachedAt < CACHE_TTL_MS) {
-    return res.status(200).json({ ...cachedPayload, cache: "HIT_60_SECONDS" });
+    const quoteTime = Date.parse(cachedPayload.quote?.timestamp || "");
+    const quoteAge = Date.now() - quoteTime;
+    if (cachedPayload.quote?.status === "ok" &&
+        Number.isFinite(quoteTime) && quoteAge >= 0 &&
+        quoteAge <= MAX_QUOTE_AGE_MS) {
+      return res.status(200).json({ ...cachedPayload, cache: "HIT_30_SECONDS" });
+    }
+    cachedPayload = null;
+    cachedAt = 0;
   }
   if (!key) {
     return res.status(503).json({
@@ -437,14 +462,12 @@ module.exports = async function handler(req, res) {
     let quote;
 
     try {
-      quote = {
-        status: "ok",
-        price: await getLatestPrice(key)
-      };
+      quote = await getLatestQuote(key);
     } catch (error) {
       quote = {
         status: "error",
         price: null,
+        freshness: "UNVERIFIED",
         message: error.message
       };
     }
@@ -452,7 +475,7 @@ module.exports = async function handler(req, res) {
     const signal = createSignal(
       candles,
       h4Candles,
-      quote.price
+      quote.status === "ok" ? quote.price : null
     );
 
     const payload = {
@@ -484,7 +507,7 @@ module.exports = async function handler(req, res) {
       signal,
       executionStatus: "RESEARCH_ONLY_NOT_TRADE_READY",
       warning:
-        "OHLC yaklaşık simülasyonudur. Gerçek XM bid/ask, spread, komisyon ve bağımsız ileri test doğrulanmamıştır.",
+        "Fiyat zaman damgası en fazla 180 saniye eski olmalıdır. Bid/ask, gerçek spread, kayma, komisyon ve bağımsız ileri test doğrulanmamıştır.",
       generatedAt: new Date().toISOString()
     };
     cachedPayload = payload;
@@ -502,4 +525,4 @@ module.exports = async function handler(req, res) {
 
 
 // Export pure functions for deterministic automated tests. The default export remains the Vercel handler.
-module.exports.__test = { parseTime, normalizeCandles, emaSeries, ema, aggregateH4, calculateMACDHistogram, calculateATR, analyzeTrend, createSignal };
+module.exports.__test = { parseTime, normalizeCandles, emaSeries, ema, aggregateH4, calculateMACDHistogram, calculateATR, analyzeTrend, createSignal, getLatestQuote };

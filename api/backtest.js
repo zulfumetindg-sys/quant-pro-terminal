@@ -615,7 +615,7 @@ module.exports = async function handler(req, res) {
         results,
         persistence: "NOT_STORED_PERMANENTLY",
         executionStatus: "RESEARCH_ONLY_NOT_TRADE_READY",
-        warning: "İleri test, Twelve Data'nın sunduğu son 5000 mum üzerinden yeniden hesaplanır. Kalıcı veri tabanı olmadığı için sağlayıcının geçmiş mum sınırı aşılırsa eski test verileri kaybolabilir. XM tarihsel spread ve komisyon doğrulanmamıştır.",
+        warning: "İleri test, Twelve Data'nın sunduğu son 5000 mum üzerinden yeniden hesaplanır. Kalıcı veri tabanı olmadığı için sağlayıcının geçmiş mum sınırı aşılırsa eski test verileri kaybolabilir. Gerçek piyasa spread ve komisyonu doğrulanmamıştır.",
         generatedAt: new Date().toISOString()
       });
     }
@@ -664,7 +664,7 @@ module.exports = async function handler(req, res) {
         ohlcAssumedMidPrice: true,
         spreadUSD: SPREAD_USD,
         slippagePerSideUSD: SLIPPAGES,
-        historicalXMSpreadAvailable: false,
+        brokerSpecificSpreadVerified: false,
         commissionVerified: false
       },
       sampleRequirement: 30,
@@ -678,7 +678,7 @@ module.exports = async function handler(req, res) {
       },
       historicalWinProbability: "NOT_A_LIVE_SIGNAL_PROBABILITY",
       executionStatus: "RESEARCH_ONLY_NOT_TRADE_READY",
-      warning: "Bu sonuçlar tarihsel OHLC simülasyonudur. Önceki V9 sonuçlarıyla birebir karşılaştırılmamalıdır; işlem sırası ve dönem sınırı düzeltmeleri nedeniyle yeniden hesaplanmıştır. Gerçek XM işlem maliyetleri doğrulanmamıştır.",
+      warning: "Bu sonuçlar tarihsel OHLC simülasyonudur. Önceki V9 sonuçlarıyla birebir karşılaştırılmamalıdır; işlem sırası ve dönem sınırı düzeltmeleri nedeniyle yeniden hesaplanmıştır. Gerçek piyasa işlem maliyetleri doğrulanmamıştır.",
       generatedAt: new Date().toISOString()
     });
 

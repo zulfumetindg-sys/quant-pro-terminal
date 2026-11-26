@@ -20,8 +20,8 @@ function updateStats(signal, dataOnline) {
   const active = signal && (signal.status === "BUY" || signal.status === "SELL");
   $("activeCount").textContent = active ? "1" : "0";
   $("activeDetail").textContent = active ? "Altın için sinyal var" : "Şu an AL / SAT sinyali yok";
-  $("dataStatus").textContent = dataOnline ? "ONLINE" : "BEKLENİYOR";
-  $("dataDetail").textContent = dataOnline ? "XAUUSD verisi alındı" : "Altın verisi bekleniyor";
+  $("dataStatus").textContent = dataOnline ? "DOĞRULANDI" : "DOĞRULANMADI";
+  $("dataDetail").textContent = dataOnline ? "Fiyat zaman damgası geçerli" : "Fiyatın güncelliği doğrulanamadı";
 }
 
 function renderSignal(signal) {
@@ -40,7 +40,7 @@ function renderSignal(signal) {
     '">' + label + '</span><span class="signal-muted">XAUUSD · H1 + tamamlanmış H4</span></div>';
 
   html += '<div class="signal-grid">' +
-    '<div><small>Canlı fiyat</small><b>' + fmt(signal.currentPrice) + '</b></div>' +
+    '<div><small>Doğrulanmış sağlayıcı fiyatı</small><b>' + fmt(signal.currentPrice) + '</b></div>' +
     '<div><small>Giriş referansı</small><b>' + fmt(signal.entry) + '</b></div>' +
     '<div><small>Stop loss</small><b>' + fmt(signal.sl) + '</b></div>' +
     '<div><small>Take profit</small><b>' + fmt(signal.tp) + '</b></div>' +
@@ -103,9 +103,9 @@ async function loadSignal(force = false) {
       " · " + (payload.completedH4Count ?? "—") + " tamamlanmış H4 mum";
 
     if (online) {
-      setNotice("Altın verisi alındı", "XAUUSD analiz edildi. Yeni veri isteği en erken 60 saniye sonra yapılabilir.", "ok");
+      setNotice("Fiyat zaman damgası doğrulandı", "XAUUSD fiyatı " + (payload.quote.ageSeconds ?? "—") + " saniye önce güncellendi. Bid/ask ve gerçek işlem maliyeti ayrıca doğrulanmış değildir.", "ok");
     } else {
-      setNotice("Altın fiyatı doğrulanamadı", "Sinyal verisi geldi ancak güncel fiyat alınamadı. İşlem kararı üretme.", "bad");
+      setNotice("Fiyat güncelliği doğrulanamadı", "Zaman damgası eksik veya 180 saniyeden eski. Güvenlik gereği AL/SAT sinyali üretilmedi.", "bad");
     }
   } catch (error) {
     updateStats(null, false);
@@ -256,7 +256,7 @@ loadSignal();
         '<span>DD: ' + esc(period.metrics.maxDrawdownR) + 'R</span>' +
         '<span>' + (period.metrics.insufficientSample ? "Örneklem yetersiz" : "30+ işlem") + '</span></div>'
       ).join("") +
-      '<p class="risk-note">Tüm altı maliyet/dönem kombinasyonu gösterilir. OHLC simülasyonudur; canlı kazanma olasılığı değildir. XM bid/ask, komisyon ve gerçek kayma doğrulanmamıştır.</p>';
+      '<p class="risk-note">Tüm altı maliyet/dönem kombinasyonu gösterilir. OHLC simülasyonudur; canlı kazanma olasılığı değildir. Gerçek bid/ask, spread, komisyon ve kayma doğrulanmamıştır.</p>';
   } catch (error) {
     output.textContent = "Geri test alınamadı: " + error.message;
   } finally {
