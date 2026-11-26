@@ -55,7 +55,7 @@ function normalizeCandles(values) {
   return [...byTime.values()].sort((a, b) => a.time - b.time);
 }
 
-function checkLatestCompletedH1Freshness(candles, now = Date.now(), maxAgeMs = 2 * 3600000) {
+function checkLatestCompletedH1Freshness(candles, now = Date.now(), maxAgeMs = 3600000) {
   if (!Array.isArray(candles) || candles.length === 0) {
     return { fresh: false, ageMs: null, reason: "H1_CANDLES_UNAVAILABLE" };
   }
