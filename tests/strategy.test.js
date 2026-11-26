@@ -501,7 +501,7 @@ test("manual journal accepts only fresh XAUUSD BUY or SELL signals with at least
   const expiredClose = now - 3600001;
   assert.equal(journal.validateOpenPayload({ signal: { ...signal, signalId: "XAUUSD:BUY:" + expiredClose, signalCandleClosedAt: new Date(expiredClose).toISOString(), signalValidUntil: new Date(expiredClose + 3600000).toISOString() }, fillPrice: 2650 }, now).error, "SIGNAL_EXPIRED_OR_INVALID");
   assert.equal(journal.validateOpenPayload({ signal, fillPrice: 2653 }, now).error, "ACTUAL_FILL_TOO_FAR_FROM_SIGNAL");
-  assert.equal(journal.validateOpenPayload({ signal, fillPrice: 2659 }, now).error, "ACTUAL_FILL_RR_BELOW_1_8");
+  assert.equal(journal.validateOpenPayload({ signal, fillPrice: 2651 }, now).error, "ACTUAL_FILL_RR_BELOW_1_8");
 });
 
 test("manual journal validates close prices and calculates realized R from actual fill", () => {
