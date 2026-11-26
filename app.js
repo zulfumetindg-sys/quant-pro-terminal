@@ -237,6 +237,9 @@ function journalRequest(method, body) {
         SIGNAL_ALREADY_RECORDED: "Bu sinyal daha önce kaydedildi; tekrar açılamaz.",
         SIGNAL_EXPIRED_OR_INVALID: "Sinyalin süresi dolmuş veya geçerliliği doğrulanamıyor.",
         ACTUAL_FILL_RR_BELOW_1_8: "Gerçekleşen giriş fiyatında R:R 1:1,8 altında.",
+        ACTUAL_FILL_TOO_FAR_FROM_SIGNAL: "Gerçekleşen fiyat sinyal referansından %0,10 üzerinde uzak; fiyat kovalanmadı.",
+        TRADE_ID_NOT_ACTIVE: "Kapanış isteği açık işlem kimliğiyle eşleşmiyor.",
+        PRICE_FIELDS_INVALID: "Sinyal veya gerçekleşen fiyat alanları geçersiz.",
         FILL_PRICE_OUTSIDE_RISK_LEVELS: "Giriş fiyatı SL/TP seviyelerinin dışında.",
         UNAUTHORIZED: "Kayıt anahtarı geçersiz."
       };
