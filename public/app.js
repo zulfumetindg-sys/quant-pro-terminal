@@ -20,6 +20,8 @@ function render(){
  }).join("");
 }
 function notice(type,title,message){const n=document.getElementById("connectionNotice");n.className="notice "+(type||"");document.getElementById("connectionTitle").textContent=title;document.getElementById("connectionText").textContent=message;}
+function updateMarketStatus(count){const status=document.querySelector(".status-text");const detail=status&&status.parentElement.querySelector("small");if(status)status.textContent=count>0?"ONLINE":"OFFLINE";if(detail)detail.textContent=count>0?count+" / 6 sembol aktif":"API bağlantısı yok";}
+function updateSignalStat(s){const active=s&&(s.status==="BUY"||s.status==="SELL");const value=document.getElementById("activeCount");const detail=value&&value.parentElement.querySelector("small");if(value)value.textContent=active?"1":"0";if(detail)detail.textContent=active?"Altın için aktif sinyal":"Şu an AL / SAT sinyali yok";}
 function fmt(v){return v!==null&&v!==undefined&&v!==""&&Number.isFinite(Number(v))?Number(v).toFixed(2):"—";}
 function renderSignal(s){
  const box=document.getElementById("goldSignal");
@@ -32,13 +34,13 @@ function renderSignal(s){
 }
 async function loadMarket(){
  const btn=document.getElementById("refreshBtn");btn.disabled=true;btn.textContent="Yükleniyor…";
- try{const r=await fetch("/api/market-data",{cache:"no-store"}),p=await r.json();if(!r.ok)throw new Error(p.error||"Piyasa verisi alınamadı");latestData=p.data||{};render();document.querySelector(".connection").innerHTML="<i></i> VERİ KONTROL EDİLDİ";notice("ok","Piyasa veri servisi yanıt verdi","Başarılı sembol: "+(p.successCount||0)+" / 6. Altın sinyali ayrı olarak hesaplanır.");}
- catch(e){notice("bad","Piyasa verisi alınamadı",e.message);}finally{btn.disabled=false;btn.textContent="↻ Yenile";}
+ try{const r=await fetch("/api/market-data",{cache:"no-store"}),p=await r.json();if(!r.ok)throw new Error(p.error||"Piyasa verisi alınamadı");latestData=p.data||{};render();updateMarketStatus(p.successCount||0);document.querySelector(".connection").innerHTML="<i></i> VERİ KONTROL EDİLDİ";notice("ok","Piyasa veri servisi yanıt verdi","Başarılı sembol: "+(p.successCount||0)+" / 6. Altın sinyali ayrı olarak hesaplanır.");}
+ catch(e){updateMarketStatus(0);notice("bad","Piyasa verisi alınamadı",e.message);}finally{btn.disabled=false;btn.textContent="↻ Yenile";}
 }
 async function loadSignal(){
  const btn=document.getElementById("signalBtn");btn.disabled=true;btn.textContent="Altın analizi yükleniyor…";
- try{const r=await fetch("/api/signal-engine",{cache:"no-store"}),p=await r.json();if(!r.ok||!p.ok)throw new Error(p.message||p.error||"Sinyal hesaplanamadı");latestSignal=p.signal;renderSignal(latestSignal);document.getElementById("signalMeta").textContent="Son hesaplama: "+(p.generatedAt||"—")+" · "+p.candleCount+" H1 mum / "+p.completedH4Count+" H4 mum";}
- catch(e){document.getElementById("goldSignal").innerHTML='<p class="signal-error">'+esc(e.message)+'</p>';document.getElementById("signalMeta").textContent="Veri alınamadı";}
+ try{const r=await fetch("/api/signal-engine",{cache:"no-store"}),p=await r.json();if(!r.ok||!p.ok)throw new Error(p.message||p.error||"Sinyal hesaplanamadı");latestSignal=p.signal;renderSignal(latestSignal);updateSignalStat(latestSignal);document.getElementById("signalMeta").textContent="Son hesaplama: "+(p.generatedAt||"—")+" · "+p.candleCount+" H1 mum / "+p.completedH4Count+" H4 mum";}
+ catch(e){updateSignalStat(null);document.getElementById("goldSignal").innerHTML='<p class="signal-error">'+esc(e.message)+'</p>';document.getElementById("signalMeta").textContent="Veri alınamadı";}
  finally{btn.disabled=false;btn.textContent="Altın sinyalini yenile";}
 }
 async function loadBacktest(){
