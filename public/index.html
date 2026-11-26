@@ -36,7 +36,7 @@
     </section>
     <section class="notice" id="connectionNotice">
       <div class="notice-icon">i</div>
-      <div><strong id="connectionTitle">Twelve Data bağlantısı bekleniyor</strong><p id="connectionText">API anahtarı Netlify Functions ortam değişkenine eklendikten sonra bağlantı testi yapılabilir. Anahtar tarayıcıya gönderilmez.</p></div>
+      <div><strong id="connectionTitle">Twelve Data bağlantısı bekleniyor</strong><p id="connectionText">API anahtarı Vercel ortam değişkeninde güvenli tutulur. Anahtar tarayıcıya gönderilmez.</p></div>
     </section>
     <section class="stats-grid">
       <article class="stat-card"><span>İZLENEN PİYASA</span><strong id="marketCount">08</strong><small>FX · METAL · ENDEKS</small></article>
@@ -53,6 +53,13 @@
       </div>
     </section>
     <section class="market-grid" id="marketGrid" aria-live="polite"></section>
+    <section class="signal-panel" id="gold-panel">
+      <div class="section-head compact"><div><div class="eyebrow">XAUUSD · SIGNAL ENGINE</div><h2>Altın işlem analizi</h2></div><button class="refresh-btn" id="signalBtn">Altın sinyalini yenile</button></div>
+      <div id="goldSignal" class="signal-content"><p class="signal-muted">H1 ve tamamlanmış H4 verileri yükleniyor…</p></div>
+      <p id="signalMeta" class="signal-muted">Twelve Data bağlantısı bekleniyor.</p>
+      <div class="backtest-tools"><button class="connect-btn" id="backtestBtn">Tarihsel geri testi çalıştır</button><div id="backtestResults" class="backtest-results">Geri test isteğe bağlıdır; çalıştırıldığında tarihsel performans özetini gösterir.</div></div>
+    </section>
+
     <section class="section-head signal-head" id="signal-head">
       <div><div class="eyebrow">SIGNAL CENTER</div><h2>Sinyal geçmişi</h2></div>
       <span class="pill muted">Henüz kayıt yok</span>
