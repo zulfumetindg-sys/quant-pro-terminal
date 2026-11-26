@@ -1,3 +1,4 @@
+
 const SYMBOLS = {
   EURUSD: "EUR/USD",
   GBPUSD: "GBP/USD",
@@ -34,11 +35,13 @@ function normalizeCandles(values) {
 
 function aggregateH4(candles) {
   const groups = {};
+
   for (const c of candles) {
     const t = new Date(c.datetime);
     const bucket = new Date(t);
     bucket.setUTCHours(Math.floor(t.getUTCHours() / 4) * 4, 0, 0, 0);
     const key = bucket.toISOString();
+
     if (!groups[key]) groups[key] = [];
     groups[key].push(c);
   }
@@ -47,6 +50,7 @@ function aggregateH4(candles) {
     .filter(([, g]) => {
       if (g.length !== 4) return false;
       const times = g.map(c => new Date(c.datetime).getTime());
+
       for (let i = 1; i < times.length; i++) {
         if (times[i] - times[i - 1] !== 3600000) return false;
       }
@@ -64,16 +68,20 @@ function aggregateH4(candles) {
 
 function calculateATR(candles, period = 14) {
   if (candles.length < period + 1) return null;
+
   const ranges = [];
+
   for (let i = 1; i < candles.length; i++) {
     const c = candles[i];
     const p = candles[i - 1];
+
     ranges.push(Math.max(
       c.high - c.low,
       Math.abs(c.high - p.close),
       Math.abs(c.low - p.close)
     ));
   }
+
   const recent = ranges.slice(-period);
   return recent.reduce((a, b) => a + b, 0) / period;
 }
@@ -120,6 +128,7 @@ function createSignal(h1, h4, candles, currentPrice) {
   }
 
   const atr = calculateATR(candles);
+
   if (!atr || !Number.isFinite(atr)) {
     return { status: "WAIT", reason: "ATR_UNAVAILABLE" };
   }
@@ -128,9 +137,12 @@ function createSignal(h1, h4, candles, currentPrice) {
   const risk = Math.max(atr * 1.5, Math.abs(entry) * 0.001);
   const reward = risk * 1.8;
   const side = h1.trend;
+
   const sl = side === "BUY" ? entry - risk : entry + risk;
   const tp = side === "BUY" ? entry + reward : entry - reward;
+
   const hasQuote = Number.isFinite(currentPrice) && currentPrice > 0;
+
   const distance = hasQuote
     ? Math.abs(currentPrice - entry) / Math.abs(entry) * 100
     : null;
@@ -163,29 +175,53 @@ async function getLatestPrice(symbol, key) {
   const response = await fetch(url, {
     headers: { Authorization: `apikey ${key}` }
   });
+
   const body = await response.json();
   const price = Number(body.price);
 
   if (!response.ok || !Number.isFinite(price) || price <= 0) {
     throw new Error(body.message || "LIVE_PRICE_UNAVAILABLE");
   }
+
   return price;
 }
 
 module.exports = async function handler(req, res) {
-  res.setHeader("Cache-Control", "no-store");
+  // Aynı URL için tekrar istekleri Vercel önbelleğinde tut.
+  res.setHeader(
+    "Cache-Control",
+    "public, s-maxage=50, stale-while-revalidate=10"
+  );
   res.setHeader("Content-Type", "application/json; charset=utf-8");
 
   if (req.method !== "GET") {
-    return res.status(405).json({ ok: false, error: "METHOD_NOT_ALLOWED" });
+    return res.status(405).json({
+      ok: false,
+      error: "METHOD_NOT_ALLOWED"
+    });
   }
 
   const key = process.env.TWELVE_DATA_API_KEY;
+
   if (!key) {
-    return res.status(503).json({ ok: false, error: "API_KEY_MISSING" });
+    return res.status(503).json({
+      ok: false,
+      error: "API_KEY_MISSING"
+    });
   }
 
   try {
+    // Her dakika 5 sembolden yalnızca 3 tanesinin canlı fiyatını al.
+    const markets = Object.keys(SYMBOLS);
+    const minuteSlot = Math.floor(Date.now() / 60000) % markets.length;
+
+    const selectedMarkets = [
+      markets[minuteSlot],
+      markets[(minuteSlot + 1) % markets.length],
+      markets[(minuteSlot + 2) % markets.length]
+    ];
+
+    // 5 kredi: beş piyasanın H1 mum verisi.
     const url = new URL("https://api.twelvedata.com/time_series");
     url.searchParams.set("symbol", Object.values(SYMBOLS).join(","));
     url.searchParams.set("interval", "1h");
@@ -195,6 +231,7 @@ module.exports = async function handler(req, res) {
     const response = await fetch(url, {
       headers: { Authorization: `apikey ${key}` }
     });
+
     const body = await response.json();
 
     if (!response.ok || body.status === "error") {
@@ -205,8 +242,11 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    // 3 kredi: bu dakika sırası gelen üç piyasanın canlı fiyatı.
     const quoteEntries = await Promise.all(
-      Object.entries(SYMBOLS).map(async ([market, symbol]) => {
+      selectedMarkets.map(async market => {
+        const symbol = SYMBOLS[market];
+
         try {
           return [market, {
             status: "ok",
@@ -222,15 +262,28 @@ module.exports = async function handler(req, res) {
     );
 
     const quotes = Object.fromEntries(quoteEntries);
+
+    // Sırası gelmeyen piyasaların fiyatını canlı gibi göstermiyoruz.
+    for (const market of markets) {
+      if (!quotes[market]) {
+        quotes[market] = {
+          status: "waiting",
+          price: null,
+          message: "Bu dakika canlı fiyat sırası değil."
+        };
+      }
+    }
+
     const results = {};
 
     for (const [market, symbol] of Object.entries(SYMBOLS)) {
       const item = body[symbol];
+      const quote = quotes[market];
 
       if (!item || !Array.isArray(item.values)) {
         results[market] = {
           symbol,
-          quote: quotes[market],
+          quote,
           signal: {
             status: "WAIT",
             reason: item?.message || "CANDLE_DATA_UNAVAILABLE"
@@ -241,27 +294,44 @@ module.exports = async function handler(req, res) {
 
       const candles = normalizeCandles(item.values);
       const h4Candles = aggregateH4(candles);
+
       const h1 = analyze(candles, "H1");
       const h4 = analyze(h4Candles, "H4");
-      const quote = quotes[market];
-      const currentPrice = quote?.status === "ok" ? quote.price : null;
+
+      const currentPrice =
+        quote.status === "ok" ? quote.price : null;
 
       results[market] = {
         symbol,
         quote,
         h1,
         h4,
-        signal: createSignal(h1, h4, candles, currentPrice)
+        signal: createSignal(
+          h1,
+          h4,
+          candles,
+          currentPrice
+        )
       };
     }
 
     return res.status(200).json({
       ok: true,
-      engine: "QUANT PRO SIGNAL ENGINE V4",
+      engine: "QUANT PRO SIGNAL ENGINE V5",
       mode: "SIGNALS_ONLY",
       provider: "Twelve Data",
       quoteEndpoint: "/price",
-      quoteCreditsNote: "Canlı fiyat kontrolü 5 sembol için yaklaşık 5 API kredisi tüketir.",
+      creditPlan: {
+        candleCredits: 5,
+        liveQuoteCredits: 3,
+        expectedTotalCredits: 8,
+        planLimit: 8
+      },
+      quoteRotation: {
+        selectedMarkets,
+        rotationSlot: minuteSlot,
+        message: "Canlı fiyatlar beş piyasa arasında dönüşümlü alınır."
+      },
       generatedAt: new Date().toISOString(),
       results
     });
