@@ -356,13 +356,15 @@ function runBacktest(candles, h4, indicators, slippage, period) {
   const firstAfterPeriod = candles.findIndex(
     x => x.time >= periodEnd
   );
+  const periodComplete = firstAfterPeriod >= 0;
 
-  const lastIndex = firstAfterPeriod < 0
-    ? candles.length - 1
-    : firstAfterPeriod - 1;
+  const lastIndex = periodComplete
+    ? firstAfterPeriod - 1
+    : candles.length - 1;
 
   let h4Index = -1;
   let i = 60;
+  let openTrade = null;
 
   while (i < lastIndex) {
     const signalCloseTime = candles[i].time + 3600000;
@@ -388,12 +390,12 @@ function runBacktest(candles, h4, indicators, slippage, period) {
     }
 
     const trade = calculateTrade(
-      candles, i, signal, slippage, lastIndex, true
+      candles, i, signal, slippage, lastIndex, periodComplete
     );
 
     if (trade.open) {
-      i++;
-      continue;
+      openTrade = trade;
+      break;
     }
 
     const exitIndex = trade.exitIndex;
@@ -405,12 +407,15 @@ function runBacktest(candles, h4, indicators, slippage, period) {
 
   return {
     period: period.name,
+    periodComplete,
+    periodStatus: periodComplete ? "PERIOD_COMPLETE" : "PERIOD_STILL_RUNNING",
     spreadUSD: SPREAD_USD,
     slippagePerSideUSD: slippage,
     entryReference: "NEXT_H1_OPEN_AFTER_SIGNAL",
     stopATR: STOP_ATR,
     targetR: TARGET_R,
     metrics: getMetrics(trades),
+    openTrade,
     lastTrades: trades.slice(-10)
   };
 }

@@ -170,93 +170,26 @@ async function loadBacktest() {
   button.disabled = true;
   button.textContent = "Geri test çalışıyor…";
   output.textContent = "Tarihsel altın mumları analiz ediliyor…";
-
   try {
     const response = await fetchWithTimeout("/api/backtest", { cache: "no-store" }, 60000);
     const payload = await response.json();
-    if (!response.ok || !payload.ok) {
-      throw new Error(payload.message || payload.error || "Geri test başarısız.");
-    }
-
+    if (!response.ok || !payload.ok) throw new Error(payload.message || payload.error || "Geri test başarısız.");
     const periods = payload.results || [];
     output.innerHTML =
       '<p>Motor: ' + esc(payload.engine) + ' · Mum: ' + esc(payload.candleCount) +
-      ' · Spread: 
-  } catch (error) {
-    output.textContent = "Geri test alınamadı: " + error.message;
-  } finally {
-    button.disabled = false;
-    button.textContent = "Tarihsel geri testi çalıştır";
-  }
-}
-
-$("refreshBtn").addEventListener("click", () => loadSignal());
-$("backtestBtn").addEventListener("click", loadBacktest);
-$("aiAnalyzeBtn").addEventListener("click", loadFreeAnalysis);
-
-let installPrompt;
-window.addEventListener("beforeinstallprompt", event => {
-  event.preventDefault();
-  installPrompt = event;
-  $("installBtn").hidden = false;
-});
-$("installBtn").addEventListener("click", async () => {
-  if (!installPrompt) return;
-  installPrompt.prompt();
-  await installPrompt.userChoice;
-  installPrompt = null;
-  $("installBtn").hidden = true;
-});
-
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
-}
-
-loadSignal();
- + esc(payload.costModel && payload.costModel.spreadUSD) +
+      ' · Spread: ' + esc(payload.costModel && payload.costModel.spreadUSD) +
       ' · Kayma: işlem başına yön bazında $0.10 / $0.20 senaryoları</p>' +
       periods.map(period =>
-        '<div class="backtest-row"><b>' + esc(period.period) + ' · Kayma/yan: 
-  } catch (error) {
-    output.textContent = "Geri test alınamadı: " + error.message;
-  } finally {
-    button.disabled = false;
-    button.textContent = "Tarihsel geri testi çalıştır";
-  }
-}
-
-$("refreshBtn").addEventListener("click", () => loadSignal());
-$("backtestBtn").addEventListener("click", loadBacktest);
-$("aiAnalyzeBtn").addEventListener("click", loadFreeAnalysis);
-
-let installPrompt;
-window.addEventListener("beforeinstallprompt", event => {
-  event.preventDefault();
-  installPrompt = event;
-  $("installBtn").hidden = false;
-});
-$("installBtn").addEventListener("click", async () => {
-  if (!installPrompt) return;
-  installPrompt.prompt();
-  await installPrompt.userChoice;
-  installPrompt = null;
-  $("installBtn").hidden = true;
-});
-
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
-}
-
-loadSignal();
- + esc(period.slippagePerSideUSD) + '</b>' +
+        '<div class="backtest-row"><b>' + esc(period.period) + ' · Kayma/yan: ' + esc(period.slippagePerSideUSD) + '</b>' +
         '<span>İşlem: ' + esc(period.metrics.tradeCount) + '</span>' +
         '<span>WR: ' + (period.metrics.winRatePercent == null ? "—" : esc(period.metrics.winRatePercent) + "%") + '</span>' +
         '<span>PF: ' + esc(period.metrics.profitFactor) + '</span>' +
         '<span>Net: ' + esc(period.metrics.netProfitR) + 'R</span>' +
         '<span>DD: ' + esc(period.metrics.maxDrawdownR) + 'R</span>' +
-        '<span>' + (period.metrics.insufficientSample ? "Örneklem yetersiz" : "30+ işlem") + '</span></div>'
+        '<span>' + (period.metrics.insufficientSample ? "Örneklem yetersiz" : "30+ işlem") + '</span>' +
+        '<span>' + (period.periodComplete ? "Dönem tamamlandı" : "Dönem sürüyor · açık işlem sayılmadı") + '</span></div>'
       ).join("") +
-      '<p class="risk-note">Tüm altı maliyet/dönem kombinasyonu gösterilir. OHLC simülasyonudur; canlı kazanma olasılığı değildir. Gerçek bid/ask, spread, komisyon ve kayma doğrulanmamıştır.</p>';
+      '<p class="risk-note">Tüm altı maliyet/dönem kombinasyonu gösterilir. OHLC simülasyonudur; canlı kazanma olasılığı değildir. Gerçek bid/ask, spread, komisyon ve kayma doğrulanmamıştır. Tamamlanmamış dönemde açık işlemler sonuçlara dahil edilmez.</p>';
   } catch (error) {
     output.textContent = "Geri test alınamadı: " + error.message;
   } finally {
@@ -264,11 +197,9 @@ loadSignal();
     button.textContent = "Tarihsel geri testi çalıştır";
   }
 }
-
 $("refreshBtn").addEventListener("click", () => loadSignal());
 $("backtestBtn").addEventListener("click", loadBacktest);
 $("aiAnalyzeBtn").addEventListener("click", loadFreeAnalysis);
-
 let installPrompt;
 window.addEventListener("beforeinstallprompt", event => {
   event.preventDefault();
@@ -282,9 +213,7 @@ $("installBtn").addEventListener("click", async () => {
   installPrompt = null;
   $("installBtn").hidden = true;
 });
-
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
 }
-
 loadSignal();

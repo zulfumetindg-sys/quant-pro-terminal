@@ -309,3 +309,37 @@ test("forward test requires 400 H1 and 100 completed H4 warmup candles", () => {
   assert.equal(backtest.hasForwardWarmup(history, start + 100 * 3600000), false);
   assert.equal(backtest.hasForwardWarmup([], start), false);
 });
+
+
+test("incomplete historical period excludes an open trade instead of force-closing it", () => {
+  const base = Date.UTC(2026, 0, 5, 0, 0, 0);
+  const data = Array.from({ length: 120 }, (_, i) => {
+    const price = 2300 + 0.0001 * i * i;
+    return { time: base + i * 3600000, open: price, high: price + 0.5, low: price - 0.5, close: price + 0.005 };
+  });
+  const h4 = backtest.makeH4(data);
+  const indicators = backtest.buildIndicators(data);
+  const period = { name: "INCOMPLETE_TEST", start: new Date(base + 90 * 3600000).toISOString(), end: new Date(base + 120 * 3600000).toISOString() };
+  const result = backtest.runBacktest(data, h4, indicators, 0.1, period);
+  assert.equal(result.periodComplete, false);
+  assert.equal(result.periodStatus, "PERIOD_STILL_RUNNING");
+  assert.equal(result.metrics.tradeCount, 0);
+  assert.ok(result.openTrade);
+  assert.equal(result.openTrade.open, true);
+});
+
+test("completed historical period may close a still-open trade at its final candle", () => {
+  const base = Date.UTC(2026, 0, 5, 0, 0, 0);
+  const data = Array.from({ length: 121 }, (_, i) => {
+    const price = 2300 + 0.0001 * i * i;
+    return { time: base + i * 3600000, open: price, high: price + 0.5, low: price - 0.5, close: price + 0.005 };
+  });
+  const h4 = backtest.makeH4(data);
+  const indicators = backtest.buildIndicators(data);
+  const period = { name: "COMPLETE_TEST", start: new Date(base + 90 * 3600000).toISOString(), end: new Date(base + 120 * 3600000).toISOString() };
+  const result = backtest.runBacktest(data, h4, indicators, 0.1, period);
+  assert.equal(result.periodComplete, true);
+  assert.equal(result.periodStatus, "PERIOD_COMPLETE");
+  assert.equal(result.openTrade, null);
+  assert.ok(result.metrics.tradeCount >= 1);
+});
