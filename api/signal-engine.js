@@ -22,18 +22,37 @@ function ema(values, period) {
   return result;
 }
 
-function aggregateH4(candles) {
-  const sorted = [...candles].sort(
-    (a, b) => new Date(a.datetime) - new Date(b.datetime)
+function normalizeCandles(values) {
+  return values.map(c => ({
+    datetime: c.datetime,
+    open: Number(c.open),
+    high: Number(c.high),
+    low: Number(c.low),
+    close: Number(c.close)
+  }))
+  .filter(c =>
+    Number.isFinite(Date.parse(c.datetime)) &&
+    Number.isFinite(c.open) &&
+    Number.isFinite(c.high) &&
+    Number.isFinite(c.low) &&
+    Number.isFinite(c.close)
+  )
+  .sort((a, b) =>
+    new Date(a.datetime) - new Date(b.datetime)
   );
+}
 
+function aggregateH4(candles) {
   const groups = {};
 
-  for (const c of sorted) {
+  for (const c of candles) {
     const time = new Date(c.datetime);
-    const hour = time.getUTCHours();
     const bucket = new Date(time);
-    bucket.setUTCHours(Math.floor(hour / 4) * 4, 0, 0, 0);
+
+    bucket.setUTCHours(
+      Math.floor(time.getUTCHours() / 4) * 4,
+      0, 0, 0
+    );
 
     const key = bucket.toISOString();
 
@@ -45,9 +64,14 @@ function aggregateH4(candles) {
     .filter(([key, group]) => {
       if (group.length !== 4) return false;
 
-      const times = group.map(c => new Date(c.datetime).getTime());
+      const times = group.map(c =>
+        new Date(c.datetime).getTime()
+      );
+
       for (let i = 1; i < times.length; i++) {
-        if (times[i] - times[i - 1] !== 3600000) return false;
+        if (times[i] - times[i - 1] !== 3600000) {
+          return false;
+        }
       }
 
       return true;
@@ -78,29 +102,38 @@ function calculateATR(candles, period = 14) {
     ));
   }
 
-  return ranges.slice(-period).reduce((a, b) => a + b, 0) / period;
+  const recent = ranges.slice(-period);
+
+  return recent.reduce((a, b) => a + b, 0) / period;
 }
 
 function analyze(candles, timeframe) {
-  const closes = candles.map(c => Number(c.close));
-
-  if (closes.some(v => !Number.isFinite(v))) {
-    return { valid: false, reason: "INVALID_DATA" };
-  }
+  const closes = candles.map(c => c.close);
 
   const fastPeriod = timeframe === "H1" ? 20 : 8;
   const slowPeriod = timeframe === "H1" ? 50 : 20;
+
+  if (closes.length < slowPeriod + 1) {
+    return {
+      valid: false,
+      reason: "INSUFFICIENT_CANDLES"
+    };
+  }
 
   const fast = ema(closes, fastPeriod);
   const slow = ema(closes, slowPeriod);
 
   if (fast === null || slow === null) {
-    return { valid: false, reason: "INSUFFICIENT_CANDLES" };
+    return {
+      valid: false,
+      reason: "EMA_UNAVAILABLE"
+    };
   }
 
   return {
     valid: true,
-    trend: fast > slow ? "BUY" : fast < slow ? "SELL" : "WAIT",
+    trend: fast > slow ? "BUY" :
+           fast < slow ? "SELL" : "WAIT",
     fast,
     slow,
     price: closes[closes.length - 1],
@@ -148,11 +181,16 @@ function createSignal(h1, h4, candles) {
 
   return {
     status: side,
+    executionStatus: "NOT_TRADE_READY",
     entry,
+    entryReference: "LAST_H1_CANDLE_CLOSE",
+    currentPrice: null,
+    entryDistancePercent: null,
+    entryDistanceStatus: "UNAVAILABLE",
+    entryDistanceReason: "LIVE_QUOTE_NOT_CONNECTED",
     sl,
     tp,
     riskReward: "1:1.8",
-    entryDistancePercent: 0,
     historicalWinProbability: "UNAVAILABLE",
     backtestStatus: "NOT_TESTED",
     timeframeConfirmation: "H1+H4",
@@ -163,6 +201,10 @@ function createSignal(h1, h4, candles) {
 
 module.exports = async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
+  res.setHeader(
+    "Content-Type",
+    "application/json; charset=utf-8"
+  );
 
   if (req.method !== "GET") {
     return res.status(405).json({
@@ -185,7 +227,11 @@ module.exports = async function handler(req, res) {
       "https://api.twelvedata.com/time_series"
     );
 
-    url.searchParams.set("symbol", Object.values(SYMBOLS).join(","));
+    url.searchParams.set(
+      "symbol",
+      Object.values(SYMBOLS).join(",")
+    );
+
     url.searchParams.set("interval", "1h");
     url.searchParams.set("outputsize", "100");
     url.searchParams.set("timezone", "UTC");
@@ -213,20 +259,16 @@ module.exports = async function handler(req, res) {
 
       if (!item || !Array.isArray(item.values)) {
         results[market] = {
-          status: "WAIT",
-          reason: item?.message || "DATA_UNAVAILABLE"
+          symbol,
+          signal: {
+            status: "WAIT",
+            reason: item?.message || "DATA_UNAVAILABLE"
+          }
         };
         continue;
       }
 
-      const candles = item.values.map(c => ({
-        datetime: c.datetime,
-        open: Number(c.open),
-        high: Number(c.high),
-        low: Number(c.low),
-        close: Number(c.close)
-      })).reverse();
-
+      const candles = normalizeCandles(item.values);
       const h4Candles = aggregateH4(candles);
 
       const h1 = analyze(candles, "H1");
@@ -242,7 +284,7 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      engine: "QUANT PRO SIGNAL ENGINE V2",
+      engine: "QUANT PRO SIGNAL ENGINE V3",
       mode: "SIGNALS_ONLY",
       provider: "Twelve Data",
       generatedAt: new Date().toISOString(),
