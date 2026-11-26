@@ -519,3 +519,11 @@ test("manual journal state parser rejects corrupted state and initializes empty 
   assert.throws(() => journal.parseRedisState("{broken"));
   assert.throws(() => journal.parseRedisState({ trades: {} , activeTradeId: "" }));
 });
+
+test("manual journal Redis mutation arguments preserve atomic Lua parameter positions", () => {
+  const openArgs = journal.buildMutationArguments("open", ['{"tradeId":"t"}']);
+  assert.deepEqual(openArgs, ["open", '{"tradeId":"t"}', "", "", "500"]);
+  const closeArgs = journal.buildMutationArguments("close", ["2660", "2026-11-26T22:00:00.000Z", "11111111-1111-4111-8111-111111111111"]);
+  assert.deepEqual(closeArgs, ["close", "2660", "2026-11-26T22:00:00.000Z", "11111111-1111-4111-8111-111111111111", "500"]);
+  assert.throws(() => journal.buildMutationArguments("delete", []), /ACTION_INVALID/);
+});
