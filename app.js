@@ -57,6 +57,16 @@ function renderSignal(signal) {
   html += '<p class="signal-muted">' + esc(signal.reason || signal.entryModelWarning || "Sinyal koşulları kontrol edildi.") + '</p>' +
     '<p class="risk-note">RESEARCH_ONLY_NOT_TRADE_READY · Bu sistem emir göndermez. Bağımsız ileri test tamamlanmadığı için kazanma olasılığı üretilmez.</p>';
 
+  if (signal.signalId && signal.signalValidUntil) {
+    const validUntil = new Date(signal.signalValidUntil);
+    const validText = Number.isFinite(validUntil.getTime())
+      ? validUntil.toLocaleString("tr-TR")
+      : "DOĞRULANAMADI";
+    html += '<p class="signal-muted">Sinyal kimliği: ' + esc(signal.signalId) +
+      ' · Geçerlilik bitişi: ' + esc(validText) +
+      ' · Aynı H1 mumunda yeni sinyal değildir.</p>';
+  }
+
   box.innerHTML = html;
 }
 
