@@ -452,7 +452,8 @@ function hasForwardWarmup(candles, forwardStart) {
 
 function hasForwardContinuity(candles, forwardStart) {
   const forward = candles.filter(c => c.time >= forwardStart);
-  if (forward.length === 0) return true;
+  // An empty forward window is missing evidence, not a continuous test period.
+  if (forward.length === 0) return false;
 
   const maxGapMs = 72 * 3600000;
   if (forward[0].time - forwardStart > maxGapMs) return false;
