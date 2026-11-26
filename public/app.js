@@ -1,71 +1,162 @@
-const MARKETS = [
- {symbol:"EURUSD",name:"Euro / US Dollar",group:"FX",digits:5},
- {symbol:"GBPUSD",name:"British Pound / US Dollar",group:"FX",digits:5},
- {symbol:"USDJPY",name:"US Dollar / Japanese Yen",group:"FX",digits:3},
- {symbol:"USDTRY",name:"US Dollar / Turkish Lira",group:"FX",digits:4},
- {symbol:"XAUUSD",name:"Gold / US Dollar",group:"METAL",digits:2},
- {symbol:"XAGUSD",name:"Silver / US Dollar",group:"METAL",digits:3},
- {symbol:"NAS100",name:"Nasdaq 100",group:"INDEX",digits:2},
- {symbol:"DAX40",name:"Germany 40",group:"INDEX",digits:2}
-];
-const grid=document.getElementById("marketGrid");
-let activeFilter="ALL",latestData={},latestSignal=null;
-function esc(v){return String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
-function render(){
- const items=MARKETS.filter(m=>activeFilter==="ALL"||m.group===activeFilter);
- grid.innerHTML=items.map(m=>{
-  const d=latestData[m.symbol],good=d&&d.status==="ok"&&Number.isFinite(Number(d.price));
-  const price=good?'<div class="price live">'+Number(d.price).toLocaleString("en-US",{maximumFractionDigits:m.digits})+'</div><div class="price-stamp">Twelve Data · '+esc(d.timestamp)+'</div>':'<div class="price">— — —</div><div class="price-note">'+esc(d&&d.error?d.error:"Canlı fiyat bekleniyor")+'</div>';
-  return '<article class="market-card"><div class="market-top"><div><div class="symbol">'+m.symbol+'</div><div class="category">'+m.group+" · "+m.name+'</div></div><span class="signal-none">WATCH</span></div>'+price+'<div class="card-divider"></div><div class="timeframes"><div class="tf"><span>H1 TREND</span><b>—</b></div><div class="tf"><span>H4 TREND</span><b>—</b></div></div><div class="card-bottom"><span>Yalnızca izleme</span><b>—</b></div></article>';
- }).join("");
+let latestSignal = null;
+let lastSignalRequestAt = 0;
+const MIN_REFRESH_MS = 60000;
+
+const $ = id => document.getElementById(id);
+const esc = value => String(value == null ? "" : value).replace(/[&<>"']/g, ch => ({
+  "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+}[ch]));
+const fmt = value => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value))
+  ? Number(value).toFixed(2) : "—";
+
+function setNotice(title, message, type = "") {
+  const notice = $("connectionNotice");
+  notice.className = "notice " + type;
+  $("connectionTitle").textContent = title;
+  $("connectionText").textContent = message;
 }
-function notice(type,title,message){const n=document.getElementById("connectionNotice");n.className="notice "+(type||"");document.getElementById("connectionTitle").textContent=title;document.getElementById("connectionText").textContent=message;}
-function updateMarketStatus(count){const status=document.querySelector(".status-text");const detail=status&&status.parentElement.querySelector("small");if(status)status.textContent=count>0?"ONLINE":"OFFLINE";if(detail)detail.textContent=count>0?count+" / 6 sembol aktif":"API bağlantısı yok";}
-function updateSignalStat(s){const active=s&&(s.status==="BUY"||s.status==="SELL");const value=document.getElementById("activeCount");const detail=value&&value.parentElement.querySelector("small");if(value)value.textContent=active?"1":"0";if(detail)detail.textContent=active?"Altın için aktif sinyal":"Şu an AL / SAT sinyali yok";}
-function fmt(v){return v!==null&&v!==undefined&&v!==""&&Number.isFinite(Number(v))?Number(v).toFixed(2):"—";}
-function renderSignal(s){
- const box=document.getElementById("goldSignal");
- if(!s){box.innerHTML='<p class="signal-muted">Sinyal verisi henüz alınmadı.</p>';return;}
- const side=s.status||"WAIT",label=side==="BUY"?"AL":side==="SELL"?"SAT":"İŞLEM YOK";
- let html='<div class="signal-top"><span class="signal-side '+(side==="BUY"?"buy":side==="SELL"?"sell":"wait")+'">'+label+'</span><span class="signal-muted">H1 + tamamlanmış H4</span></div>';
- html+='<div class="signal-grid"><div><small>Canlı fiyat</small><b>'+fmt(s.currentPrice)+'</b></div><div><small>Giriş referansı</small><b>'+fmt(s.entry)+'</b></div><div><small>Stop loss</small><b>'+fmt(s.sl)+'</b></div><div><small>Take profit</small><b>'+fmt(s.tp)+'</b></div><div><small>R:R</small><b>'+esc(s.riskReward||"—")+'</b></div><div><small>Giriş uzaklığı</small><b>'+(s.entryDistancePercent==null?"—":s.entryDistancePercent+"%")+'</b></div><div><small>Tarihsel kazanma oranı</small><b>'+esc(s.historicalWinProbability||"UNAVAILABLE")+'</b></div><div><small>H1 / H4 yönü</small><b>'+esc((s.h1Trend||"—")+" / "+(s.h4Trend||"—"))+'</b></div></div>';
- html+='<p class="signal-muted">'+esc(s.reason||s.entryModelWarning||"Sinyal koşulları kontrol edildi.")+'</p><p class="risk-note">Durum: RESEARCH_ONLY_NOT_TRADE_READY. Bu panel emir göndermez. Bağımsız doğrulama olmadığı için tarihsel kazanma olasılığı verilmez.</p>';
- box.innerHTML=html;
+
+function updateStats(signal, dataOnline) {
+  const active = signal && (signal.status === "BUY" || signal.status === "SELL");
+  $("activeCount").textContent = active ? "1" : "0";
+  $("activeDetail").textContent = active ? "Altın için sinyal var" : "Şu an AL / SAT sinyali yok";
+  $("dataStatus").textContent = dataOnline ? "ONLINE" : "BEKLENİYOR";
+  $("dataDetail").textContent = dataOnline ? "XAUUSD verisi alındı" : "Altın verisi bekleniyor";
 }
-async function loadMarket(){
- latestData={};
- for(const m of MARKETS) latestData[m.symbol]={status:"pending",error:m.symbol==="XAUUSD"?"Altın sinyali yükleniyor":"Şimdilik devre dışı — altın öncelikli düşük kota modu"};
- render();
- const status=document.querySelector(".status-text");
- const detail=status&&status.parentElement.querySelector("small");
- if(status)status.textContent="GOLD ONLY";
- if(detail)detail.textContent="Düşük API kotası için yalnızca XAUUSD";
- document.querySelector(".connection").innerHTML="<i></i> ALTIN ÖNCELİKLİ MOD";
- notice("ok","API kotası koruma modu","Twelve Data kotasını tüketmemek için diğer 7 piyasa geçici olarak durduruldu. Yalnızca XAUUSD analiz ediliyor.");
+
+function renderSignal(signal) {
+  const box = $("goldSignal");
+  if (!signal) {
+    box.innerHTML = '<p class="signal-muted">Altın sinyali henüz alınamadı.</p>';
+    return;
+  }
+
+  const side = signal.status || "WAIT";
+  const label = side === "BUY" ? "AL" : side === "SELL" ? "SAT" : "İŞLEM YOK";
+  const trend = value => value === "BUY" ? "YUKARI" : value === "SELL" ? "AŞAĞI" : "—";
+
+  let html = '<div class="signal-top"><span class="signal-side ' +
+    (side === "BUY" ? "buy" : side === "SELL" ? "sell" : "wait") +
+    '">' + label + '</span><span class="signal-muted">XAUUSD · H1 + tamamlanmış H4</span></div>';
+
+  html += '<div class="signal-grid">' +
+    '<div><small>Canlı fiyat</small><b>' + fmt(signal.currentPrice) + '</b></div>' +
+    '<div><small>Giriş referansı</small><b>' + fmt(signal.entry) + '</b></div>' +
+    '<div><small>Stop loss</small><b>' + fmt(signal.sl) + '</b></div>' +
+    '<div><small>Take profit</small><b>' + fmt(signal.tp) + '</b></div>' +
+    '<div><small>Risk / getiri</small><b>' + esc(signal.riskReward || "—") + '</b></div>' +
+    '<div><small>Giriş mesafesi</small><b>' + (signal.entryDistancePercent == null ? "—" : esc(signal.entryDistancePercent) + "%") + '</b></div>' +
+    '<div><small>Geçmiş kazanma oranı</small><b>' + esc(signal.historicalWinProbability || "UNAVAILABLE") + '</b></div>' +
+    '<div><small>H1 / H4 trendi</small><b>' + trend(signal.h1Trend) + ' / ' + trend(signal.h4Trend) + '</b></div>' +
+    '</div>';
+
+  html += '<p class="signal-muted">' + esc(signal.reason || signal.entryModelWarning || "Sinyal koşulları kontrol edildi.") + '</p>' +
+    '<p class="risk-note">RESEARCH_ONLY_NOT_TRADE_READY · Bu sistem emir göndermez. Bağımsız ileri test tamamlanmadığı için kazanma olasılığı üretilmez.</p>';
+
+  box.innerHTML = html;
 }
-async function loadSignal(){
- const btn=document.getElementById("signalBtn");btn.disabled=true;btn.textContent="Altın analizi yükleniyor…";
- try{const r=await fetch("/api/signal-engine",{cache:"no-store"}),p=await r.json();if(!r.ok||!p.ok)throw new Error(p.message||p.error||"Sinyal hesaplanamadı");latestSignal=p.signal;renderSignal(latestSignal);updateSignalStat(latestSignal);if(p.quote&&Number.isFinite(Number(p.quote.price))){latestData.XAUUSD={status:"ok",price:Number(p.quote.price),timestamp:p.generatedAt};render();}document.getElementById("signalMeta").textContent="Son hesaplama: "+(p.generatedAt||"—")+" · "+p.candleCount+" H1 mum / "+p.completedH4Count+" H4 mum";}
- catch(e){updateSignalStat(null);document.getElementById("goldSignal").innerHTML='<p class="signal-error">'+esc(e.message)+'</p>';document.getElementById("signalMeta").textContent="Veri alınamadı";}
- finally{btn.disabled=false;btn.textContent="Altın sinyalini yenile";}
+
+async function loadSignal(force = false) {
+  const now = Date.now();
+  const remaining = MIN_REFRESH_MS - (now - lastSignalRequestAt);
+  if (!force && lastSignalRequestAt && remaining > 0) {
+    const seconds = Math.ceil(remaining / 1000);
+    setNotice("API kotası koruma modu", "Yeni veri isteği için " + seconds + " saniye bekle. Aynı dakika içinde tekrarlanan API çağrıları engelleniyor.", "ok");
+    return;
+  }
+
+  const button = $("refreshBtn");
+  button.disabled = true;
+  button.textContent = "Altın verisi alınıyor…";
+  lastSignalRequestAt = now;
+
+  try {
+    const response = await fetch("/api/signal-engine", { cache: "no-store" });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.message || payload.error || "Altın verisi alınamadı.");
+    }
+
+    latestSignal = payload.signal || null;
+    renderSignal(latestSignal);
+    const online = payload.quote && payload.quote.status === "ok";
+    updateStats(latestSignal, online);
+
+    $("signalMeta").textContent =
+      "Son kontrol: " + (payload.generatedAt || "—") +
+      " · " + (payload.candleCount ?? "—") + " tamamlanmış H1 mum" +
+      " · " + (payload.completedH4Count ?? "—") + " tamamlanmış H4 mum";
+
+    if (online) {
+      setNotice("Altın verisi alındı", "XAUUSD analiz edildi. Yeni veri isteği en erken 60 saniye sonra yapılabilir.", "ok");
+    } else {
+      setNotice("Altın fiyatı doğrulanamadı", "Sinyal verisi geldi ancak güncel fiyat alınamadı. İşlem kararı üretme.", "bad");
+    }
+  } catch (error) {
+    updateStats(null, false);
+    $("goldSignal").innerHTML = '<p class="signal-error">' + esc(error.message) + '</p>';
+    $("signalMeta").textContent = "Veri alınamadı";
+    setNotice("Veri sağlayıcı yanıt vermedi", error.message + " API kotası açılana kadar tekrar tekrar yenileme yapma.", "bad");
+  } finally {
+    button.disabled = false;
+    button.textContent = "Altın verisini yenile";
+  }
 }
-async function loadBacktest(){
- const btn=document.getElementById("backtestBtn"),out=document.getElementById("backtestResults");btn.disabled=true;btn.textContent="Geri test çalışıyor…";out.textContent="Tarihsel mumlar analiz ediliyor…";
- try{const r=await fetch("/api/backtest",{cache:"no-store"}),p=await r.json();if(!r.ok||!p.ok)throw new Error(p.message||p.error||"Geri test başarısız");const rows=(p.conservativeSummary&&p.conservativeSummary.periods)||[];
- out.innerHTML='<p>Motor: '+esc(p.engine)+' · Mum: '+p.candleCount+' · Spread: $'+p.costModel.spreadUSD+' · Kayma/yön: $0.20</p>'+rows.map(x=>'<div class="backtest-row"><b>'+esc(x.period)+'</b><span>İşlem: '+x.metrics.tradeCount+'</span><span>WR: '+(x.metrics.winRatePercent==null?"—":x.metrics.winRatePercent+"%")+'</span><span>PF: '+esc(x.metrics.profitFactor)+'</span><span>Net: '+x.metrics.netProfitR+'R</span><span>DD: '+x.metrics.maxDrawdownR+'R</span></div>').join("")+'<p class="risk-note">Tarihsel OHLC simülasyonudur; canlı sinyal kazanma olasılığı değildir. XM gerçek maliyetleri doğrulanmamıştır.</p>';}
- catch(e){out.textContent="Geri test alınamadı: "+e.message;}finally{btn.disabled=false;btn.textContent="Tarihsel geri testi çalıştır";}
+
+async function loadBacktest() {
+  const button = $("backtestBtn");
+  const output = $("backtestResults");
+  button.disabled = true;
+  button.textContent = "Geri test çalışıyor…";
+  output.textContent = "Tarihsel altın mumları analiz ediliyor…";
+
+  try {
+    const response = await fetch("/api/backtest", { cache: "no-store" });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.message || payload.error || "Geri test başarısız.");
+    }
+
+    const periods = (payload.conservativeSummary && payload.conservativeSummary.periods) || [];
+    output.innerHTML =
+      '<p>Motor: ' + esc(payload.engine) + ' · Mum: ' + esc(payload.candleCount) +
+      ' · Spread: $' + esc(payload.costModel && payload.costModel.spreadUSD) + '</p>' +
+      periods.map(period =>
+        '<div class="backtest-row"><b>' + esc(period.period) + '</b>' +
+        '<span>İşlem: ' + esc(period.metrics.tradeCount) + '</span>' +
+        '<span>WR: ' + (period.metrics.winRatePercent == null ? "—" : esc(period.metrics.winRatePercent) + "%") + '</span>' +
+        '<span>PF: ' + esc(period.metrics.profitFactor) + '</span>' +
+        '<span>Net: ' + esc(period.metrics.netProfitR) + 'R</span>' +
+        '<span>DD: ' + esc(period.metrics.maxDrawdownR) + 'R</span></div>'
+      ).join("") +
+      '<p class="risk-note">Bu tarihsel OHLC simülasyonudur; gelecekteki sinyallerin kazanma olasılığı değildir. XM gerçek işlem maliyetleri ayrıca doğrulanmalıdır.</p>';
+  } catch (error) {
+    output.textContent = "Geri test alınamadı: " + error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Tarihsel geri testi çalıştır";
+  }
 }
-document.querySelectorAll(".filter").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".filter").forEach(b=>b.classList.remove("active"));btn.classList.add("active");activeFilter=btn.dataset.filter;render();}));
-document.getElementById("connectBtn").addEventListener("click",async()=>{
- const b=document.getElementById("connectBtn");b.disabled=true;b.textContent="Bağlantı test ediliyor…";
- try{const r=await fetch("/api/provider-status",{cache:"no-store"}),p=await r.json();if(!r.ok||!p.ok)throw new Error(p.error||"Bağlantı testi başarısız");notice("ok","Twelve Data API anahtarı algılandı","Sunucu API anahtarını doğruladı. Fiyat ve sinyal yenileniyor.");await loadSignal();}
- catch(e){notice("bad","Twelve Data bağlantısı başarısız",e.message);}finally{b.disabled=false;b.textContent="Veri bağlantısını test et";}
-});
-document.getElementById("refreshBtn").addEventListener("click",()=>{loadSignal();});
-document.getElementById("signalBtn").addEventListener("click",loadSignal);
-document.getElementById("backtestBtn").addEventListener("click",loadBacktest);
+
+$("refreshBtn").addEventListener("click", () => loadSignal());
+$("backtestBtn").addEventListener("click", loadBacktest);
+
 let installPrompt;
-window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installPrompt=e;document.getElementById("installBtn").hidden=false;});
-document.getElementById("installBtn").addEventListener("click",async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;document.getElementById("installBtn").hidden=true;});
-if("serviceWorker"in navigator&&location.protocol.startsWith("http"))window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
-render();loadMarket();loadSignal();
+window.addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  installPrompt = event;
+  $("installBtn").hidden = false;
+});
+$("installBtn").addEventListener("click", async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice;
+  installPrompt = null;
+  $("installBtn").hidden = true;
+});
+
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+}
+
+loadSignal();
