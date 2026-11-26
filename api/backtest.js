@@ -280,7 +280,17 @@ function calculateTrade(candles, i, signal, slippage, maxIndex, forceCloseAtEnd)
     let exitReason = null;
 
     if (hitSL) {
-      exit = side === "BUY" ? sl - slippage : sl + slippage;
+      // A stop crossed by an opening gap fills at the worse opening quote,
+      // not at the stale stop level. Intrabar collisions remain stop-first.
+      const openingQuote = side === "BUY"
+        ? candle.open - halfSpread
+        : candle.open + halfSpread;
+      const gappedThroughStop = side === "BUY"
+        ? openingQuote <= sl
+        : openingQuote >= sl;
+      exit = gappedThroughStop
+        ? (side === "BUY" ? openingQuote - slippage : openingQuote + slippage)
+        : (side === "BUY" ? sl - slippage : sl + slippage);
       exitReason = "STOP_LOSS";
     } else if (hitTP) {
       exit = side === "BUY" ? tp - slippage : tp + slippage;
