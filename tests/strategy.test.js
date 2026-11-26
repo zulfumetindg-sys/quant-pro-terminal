@@ -312,6 +312,23 @@ test("forward test requires 400 H1 and 100 completed H4 warmup candles", () => {
 });
 
 
+test("forward test rejects gaps over 72 hours but permits normal weekend gaps", () => {
+  const start = Date.UTC(2026, 10, 2, 0, 0, 0);
+  const normal = [
+    candle(start, 2600),
+    candle(start + 48 * 3600000, 2601),
+    candle(start + 49 * 3600000, 2602)
+  ];
+  const broken = [
+    candle(start, 2600),
+    candle(start + 73 * 3600000, 2601)
+  ];
+
+  assert.equal(backtest.hasForwardContinuity(normal, start), true);
+  assert.equal(backtest.hasForwardContinuity(broken, start), false);
+  assert.equal(backtest.hasForwardContinuity([], start), true);
+});
+
 test("incomplete historical period excludes an open trade instead of force-closing it", () => {
   const base = Date.UTC(2026, 0, 5, 0, 0, 0);
   const data = Array.from({ length: 120 }, (_, i) => {
