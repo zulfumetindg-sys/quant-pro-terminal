@@ -354,7 +354,9 @@ async function getLatestQuote(key) {
   });
   const body = await response.json();
   const price = Number(body.close);
-  const quoteTimestamp = Number(body.last_quote_at || body.timestamp);
+  // `timestamp` is the interval candle's opening time, not the latest quote update.
+  // Require the dedicated last_quote_at field; never fall back to candle timestamp.
+  const quoteTimestamp = Number(body.last_quote_at);
 
   if (!response.ok || body.status === "error" ||
       !Number.isFinite(price) || price <= 0) {
