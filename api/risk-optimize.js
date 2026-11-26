@@ -1,6 +1,6 @@
-
 const SYMBOL = "XAU/USD";
 const SPREAD = 0.30;
+const SPREAD_SCENARIOS = [0.30, 0.50, 0.70];
 const SLIPPAGES = [0.10, 0.20];
 
 const STOP_MULTIPLIERS = [1.2, 1.5, 1.8];
@@ -29,6 +29,7 @@ function emaSeries(values, period) {
     v = values[i] * k + v * (1 - k);
     out[i] = v;
   }
+
   return out;
 }
 
@@ -41,6 +42,7 @@ function ema(values, period) {
   for (let i = period; i < values.length; i++) {
     v = values[i] * k + v * (1 - k);
   }
+
   return v;
 }
 
@@ -94,7 +96,6 @@ function buildIndicators(c) {
   const e20 = emaSeries(close, 20);
   const e50 = emaSeries(close, 50);
 
-  // MACD 12/26/9
   const e12 = emaSeries(close, 12);
   const e26 = emaSeries(close, 26);
 
@@ -130,7 +131,6 @@ function buildIndicators(c) {
     v === null || signal[i] === null ? null : v - signal[i]
   );
 
-  // ATR 14
   const tr = Array(n).fill(null);
 
   for (let i = 1; i < n; i++) {
@@ -194,9 +194,9 @@ function getMetrics(trades) {
   };
 }
 
-function run(c, h4, ind, stopMult, targetR, slip, period) {
+function run(c, h4, ind, stopMult, targetR, slip, period, spread = SPREAD) {
   const trades = [];
-  const half = SPREAD / 2;
+  const half = spread / 2;
 
   const start = Date.parse(period.start);
   const end = Date.parse(period.end);
@@ -240,7 +240,6 @@ function run(c, h4, ind, stopMult, targetR, slip, period) {
       continue;
     }
 
-    // MACD histogram yön filtresi
     if (
       ind.hist[i] === null ||
       (h1 === "BUY" && ind.hist[i] <= 0) ||
@@ -290,7 +289,6 @@ function run(c, h4, ind, stopMult, targetR, slip, period) {
         ? x.high - half >= tp
         : x.low + half <= tp;
 
-      // Aynı mumda SL ve TP: SL önce kabul edilir
       if (hitSL) {
         exit = h1 === "BUY"
           ? sl - slip
@@ -325,7 +323,6 @@ function run(c, h4, ind, stopMult, targetR, slip, period) {
 
     trades.push(profit / risk);
 
-    // İşlem kapandıktan sonraki mumdan devam et
     i = Math.max(i + 1, exitIndex + 1);
   }
 
@@ -333,6 +330,7 @@ function run(c, h4, ind, stopMult, targetR, slip, period) {
     stopATR: stopMult,
     targetR,
     period: period.name,
+    spreadUSD: spread,
     slippagePerSideUSD: slip,
     metrics: getMetrics(trades)
   };
@@ -414,13 +412,27 @@ module.exports = async function handler(req, res) {
     const ind = buildIndicators(c);
     const results = [];
 
-    for (const stopMult of STOP_MULTIPLIERS) {
-      for (const targetR of TARGET_R) {
+    const spreadMode = req.query && req.query.mode === "spread";
+
+    if (spreadMode) {
+      for (const spread of SPREAD_SCENARIOS) {
         for (const slip of SLIPPAGES) {
           for (const period of PERIODS) {
             results.push(
-              run(c, h4, ind, stopMult, targetR, slip, period)
+              run(c, h4, ind, 1.5, 2.0, slip, period, spread)
             );
+          }
+        }
+      }
+    } else {
+      for (const stopMult of STOP_MULTIPLIERS) {
+        for (const targetR of TARGET_R) {
+          for (const slip of SLIPPAGES) {
+            for (const period of PERIODS) {
+              results.push(
+                run(c, h4, ind, stopMult, targetR, slip, period)
+              );
+            }
           }
         }
       }
@@ -428,7 +440,10 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      engine: "QUANT PRO XAUUSD RISK OPTIMIZATION V1",
+      engine: spreadMode
+        ? "QUANT PRO XAUUSD SPREAD STRESS TEST V1"
+        : "QUANT PRO XAUUSD RISK OPTIMIZATION V1",
+      mode: spreadMode ? "SPREAD_STRESS" : "RISK_OPTIMIZATION",
       symbol: SYMBOL,
       timeframe: "H1 + COMPLETED H4",
       provider: "Twelve Data",
@@ -441,10 +456,11 @@ module.exports = async function handler(req, res) {
       adxFilter: false,
       baseline: "H1 EMA20/50 + H4 EMA8/20",
       atr: 14,
-      stopMultipliers: STOP_MULTIPLIERS,
-      targetRiskRatios: TARGET_R,
+      stopMultipliers: spreadMode ? [1.5] : STOP_MULTIPLIERS,
+      targetRiskRatios: spreadMode ? [2.0] : TARGET_R,
       maxHoldingHours: 72,
-      spreadUSD: SPREAD,
+      spreadUSD: spreadMode ? null : SPREAD,
+      spreadScenariosUSD: spreadMode ? SPREAD_SCENARIOS : null,
       slippagePerSideUSD: SLIPPAGES,
       commissionPerTradeUSD: 0,
       historicalXMSpreadAvailable: false,
