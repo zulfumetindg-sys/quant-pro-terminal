@@ -126,9 +126,9 @@ async function loadAIAnalysis() {
       throw new Error(payload.message || payload.error || "AI analizi başarısız.");
     }
     output.textContent = payload.analysis +
-      "\\n\\nModel: " + payload.model +
-      "\\nKarar değiştirildi mi: Hayır" +
-      "\\nDurum: " + payload.executionStatus;
+      "\n\nModel: " + payload.model +
+      "\nKarar değiştirildi mi: Hayır" +
+      "\nDurum: " + payload.executionStatus;
   } catch (error) {
     output.textContent = "AI analizi alınamadı: " + error.message;
   } finally {
