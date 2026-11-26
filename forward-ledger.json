@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "symbol": "XAUUSD",
+  "timeframe": "H1 + COMPLETED H4",
+  "startTime": "2026-11-26T20:00:00.000Z",
+  "lastCheckedAt": null,
+  "lastError": null,
+  "checks": [],
+  "trades": []
+}
