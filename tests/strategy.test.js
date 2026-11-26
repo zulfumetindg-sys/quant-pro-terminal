@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 
 const backtest = require("../api/backtest.js").__test;
 const live = require("../api/signal-engine.js").__test;
+const { measureVolatilityShock } = require("../api/volatility.js");
 
 function candle(time, price, range = 1) {
   return {
@@ -14,6 +15,29 @@ function candle(time, price, range = 1) {
     close: price + 0.2
   };
 }
+
+test("volatility shock ratio compares latest H1 range only with preceding 14 bars", () => {
+  const base = Date.UTC(2026, 0, 5, 0, 0, 0);
+  const data = Array.from({ length: 20 }, (_, i) =>
+    candle(base + i * 3600000, 100 + i * 0.1, 1)
+  );
+  const normal = measureVolatilityShock(data, 18);
+  assert.equal(normal.available, true);
+  assert.equal(normal.baselinePeriod, 14);
+  assert.equal(normal.blocking, false);
+  assert.ok(normal.ratio > 0);
+
+  const shockData = data.map(x => ({ ...x }));
+  shockData[19] = {
+    ...shockData[19],
+    high: shockData[19].high + 20,
+    close: shockData[19].close + 10
+  };
+  const shock = measureVolatilityShock(shockData, 19);
+  assert.equal(shock.available, true);
+  assert.ok(shock.ratio > normal.ratio);
+  assert.equal(measureVolatilityShock(data.slice(0, 10)).available, false);
+});
 
 test("H4 aggregation accepts only four contiguous completed H1 candles", () => {
   const base = Date.UTC(2026, 0, 5, 0, 0, 0);
