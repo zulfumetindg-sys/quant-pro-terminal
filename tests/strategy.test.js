@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const backtest = require("../api/backtest.js").__test;
 const live = require("../api/signal-engine.js").__test;
 const { measureVolatilityShock } = require("../api/volatility.js");
+const journal = require("../api/manual-journal.js").__test;
 
 function candle(time, price, range = 1) {
   return {
@@ -456,4 +457,51 @@ test("volatility outcome buckets report closed-trade performance without creatin
   assert.equal(summary.buckets[0].metrics.winRatePercent, 100);
   assert.equal(summary.buckets[1].metrics.winRatePercent, 0);
   assert.equal(summary.buckets[3].metrics.netProfitR, -0.5);
+});
+
+test("manual journal requires a strong exact bearer token and compares it safely", () => {
+  const token = "a".repeat(40);
+  assert.equal(journal.safeEqual(token, token), true);
+  assert.equal(journal.safeEqual(token, "b".repeat(40)), false);
+  assert.equal(journal.safeEqual(token, "short"), false);
+  assert.equal(journal.safeEqual(null, token), false);
+});
+
+test("manual journal accepts only fresh XAUUSD BUY or SELL signals with at least 1.8R at actual fill", () => {
+  const now = Date.UTC(2026, 10, 26, 22, 0, 0);
+  const signal = {
+    symbol: "XAUUSD",
+    status: "BUY",
+    signalId: "XAUUSD:BUY:1795730400000",
+    signalValidUntil: new Date(now + 3600000).toISOString(),
+    entry: 2650,
+    sl: 2640,
+    tp: 2670
+  };
+  const valid = journal.validateOpenPayload({ signal, fillPrice: 2650 }, now);
+  assert.equal(valid.ok, true);
+  assert.equal(valid.trade.actualFillRiskReward, 2);
+  assert.equal(valid.trade.status, "OPEN");
+  assert.equal(valid.trade.costs, "NOT_INCLUDED");
+
+  assert.equal(journal.validateOpenPayload({ signal: { ...signal, symbol: "EURUSD" }, fillPrice: 2650 }, now).error, "XAUUSD_ONLY");
+  assert.equal(journal.validateOpenPayload({ signal: { ...signal, status: "WAIT" }, fillPrice: 2650 }, now).error, "LIVE_BUY_OR_SELL_REQUIRED");
+  assert.equal(journal.validateOpenPayload({ signal: { ...signal, signalValidUntil: new Date(now - 1).toISOString() }, fillPrice: 2650 }, now).error, "SIGNAL_EXPIRED_OR_INVALID");
+  assert.equal(journal.validateOpenPayload({ signal, fillPrice: 2659 }, now).error, "ACTUAL_FILL_RR_BELOW_1_8");
+});
+
+test("manual journal validates close prices and calculates realized R from actual fill", () => {
+  const now = Date.UTC(2026, 10, 26, 22, 0, 0);
+  assert.equal(journal.validateClosePayload({ tradeId: "bad", exitPrice: 2660 }, now).error, "TRADE_ID_INVALID");
+  assert.equal(journal.validateClosePayload({ tradeId: "11111111-1111-4111-8111-111111111111", exitPrice: -1 }, now).error, "EXIT_PRICE_INVALID");
+  const trade = { side: "BUY", fillPrice: 2650, stopLoss: 2640 };
+  assert.equal(journal.calculateRealizedR(trade, 2670), 2);
+  assert.equal(journal.calculateRealizedR({ ...trade, side: "SELL" }, 2640), 1);
+});
+
+test("manual journal state parser rejects corrupted state and initializes empty state", () => {
+  assert.deepEqual(journal.parseRedisState(null), { trades: [], activeTradeId: "" });
+  assert.deepEqual(journal.parseRedisState({ trades: [], activeTradeId: "" }), { trades: [], activeTradeId: "" });
+  assert.throws(() => journal.parseRedisState("{broken"));
+  assert.throws(() => journal.parseRedisState({ trades: {} , activeTradeId: "" }));
 });
