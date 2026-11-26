@@ -7,7 +7,7 @@
   <meta name="description" content="QUANT PRO yalnızca XAUUSD altın analiz ve sinyal terminali">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.8.3">
+  <link rel="stylesheet" href="styles.css?v=0.8.4">
   <title>QUANT PRO · XAUUSD</title>
 </head>
 <body>
@@ -76,9 +76,41 @@
       <p class="risk-note">Başlangıç risk ayarlarıdır; emir gönderilmez. Lot hesabı ve gerçek piyasa maliyetleri doğrulanmamıştır; %0,5 yalnızca araştırma amaçlı risk referansıdır.</p>
     </section>
 
-    <footer><span>QUANT PRO · v0.8.3 · XAUUSD ONLY</span><span>Yalnızca analiz · Otomatik emir yok · Trade-ready değil</span></footer>
+    <section class="journal-panel" id="manual-journal">
+      <div class="section-head compact">
+        <div><div class="eyebrow">MANUAL TRADE JOURNAL</div><h2>Manuel işlem kaydı</h2></div>
+        <span class="pill blue">XAUUSD · KALICI KAYIT</span>
+      </div>
+      <p class="risk-note">Yalnızca senin MT5'te gerçekten açıp kapattığın işlemleri kaydeder. Emir göndermez. Gerçek gerçekleşme fiyatını gir. Spread, komisyon ve swap girilmediği sürece net sonuç değildir.</p>
+      <div class="journal-auth">
+        <label for="journalToken">Güvenli kayıt anahtarı</label>
+        <input id="journalToken" type="password" autocomplete="off" placeholder="Vercel JOURNAL_ACCESS_TOKEN">
+        <button class="connect-btn" id="journalConnectBtn">Bağlan ve kayıtları yükle</button>
+      </div>
+      <div id="journalStatus" class="journal-status">Kayıt veritabanı bağlantısı bekleniyor.</div>
+      <div class="journal-grid">
+        <div class="journal-card">
+          <h3>Manuel açılış</h3>
+          <label for="journalFillPrice">MT5 gerçekleşen giriş fiyatı</label>
+          <input id="journalFillPrice" inputmode="decimal" type="number" min="0" step="0.01" placeholder="Örn. 2650.50">
+          <button class="connect-btn" id="journalOpenBtn" disabled>Mevcut AL/SAT sinyalini kaydet</button>
+          <p>Yalnızca geçerli, süresi dolmamış XAUUSD sinyali kabul edilir. Gerçek giriş fiyatındaki R:R en az 1:1,8 olmalıdır.</p>
+        </div>
+        <div class="journal-card">
+          <h3>Manuel kapanış</h3>
+          <label for="journalExitPrice">MT5 gerçekleşen çıkış fiyatı</label>
+          <input id="journalExitPrice" inputmode="decimal" type="number" min="0" step="0.01" placeholder="Örn. 2670.50">
+          <button class="connect-btn" id="journalCloseBtn" disabled>Açık işlemi kapat ve kaydet</button>
+          <p>Gerçekleşen R, gerçek giriş fiyatı ile başlangıç stop mesafesine göre hesaplanır.</p>
+        </div>
+      </div>
+      <div id="journalActive" class="journal-records">Henüz açık işlem bilgisi yok.</div>
+      <div id="journalHistory" class="journal-records"></div>
+    </section>
+
+    <footer><span>QUANT PRO · v0.8.4 · XAUUSD ONLY</span><span>Yalnızca analiz · Otomatik emir yok · Trade-ready değil</span></footer>
   </main>
 
-  <script src="app.js?v=0.8.3"></script>
+  <script src="app.js?v=0.8.4"></script>
 </body>
 </html>
