@@ -250,8 +250,9 @@ function createSignal(candles, h4Candles, currentPrice) {
     Math.abs(currentPrice - entry) / Math.abs(entry) * 100;
 
   const entryFields = {
-    entry,
-    entryReference: "LAST_COMPLETED_H1_CLOSE",
+    entry: currentPrice,
+    entryReference: "LATEST_PROVIDER_PRICE_ESTIMATE",
+    signalReference: "LAST_COMPLETED_H1_CLOSE",
     entryDistancePercent: Number(distance.toFixed(4))
   };
 
@@ -310,18 +311,18 @@ function createSignal(candles, h4Candles, currentPrice) {
   const side = h1.trend;
   const risk = Math.max(
     atr * STOP_ATR,
-    Math.abs(entry) * 0.001
+    Math.abs(currentPrice) * 0.001
   );
 
   const reward = risk * TARGET_R;
 
   const sl = side === "BUY"
-    ? entry - risk
-    : entry + risk;
+    ? currentPrice - risk
+    : currentPrice + risk;
 
   const tp = side === "BUY"
-    ? entry + reward
-    : entry - reward;
+    ? currentPrice + reward
+    : currentPrice - reward;
 
   return {
     ...base,
@@ -337,7 +338,7 @@ function createSignal(candles, h4Candles, currentPrice) {
     tp: Number(tp.toFixed(3)),
     riskReward: "1:2.0",
     entryModelWarning:
-      "Backtest next H1 open kullanır; bu sinyal son tamamlanmış H1 kapanışını referans alır."
+      "Giriş, Twelve Data son fiyatının yaklaşık tahminidir; bid/ask, spread ve kayma dahil değildir. Mesafe, son tamamlanmış H1 kapanışına göredir."
   };
 }
 
