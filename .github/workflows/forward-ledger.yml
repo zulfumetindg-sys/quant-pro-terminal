@@ -51,17 +51,54 @@ jobs:
 
           const resultsCandidate = Array.isArray(payload?.results) ? payload.results : [];
           const expectedSlippage = [0.1, 0.2];
+          const isValidTrade = trade =>
+            trade &&
+            (trade.side === "BUY" || trade.side === "SELL") &&
+            typeof trade.signalTime === "string" &&
+            Number.isFinite(Date.parse(trade.signalTime)) &&
+            typeof trade.exitTime === "string" &&
+            Number.isFinite(Date.parse(trade.exitTime)) &&
+            Number.isFinite(trade.entry) &&
+            Number.isFinite(trade.stopLoss) &&
+            Number.isFinite(trade.takeProfit) &&
+            Number.isFinite(trade.exit) &&
+            Number.isFinite(trade.netR);
+
+          const isValidResult = (result, expectedCost) => {
+            if (
+              result?.slippagePerSideUSD !== expectedCost ||
+              result?.periodStart !== payload?.startTime ||
+              !Array.isArray(result.closedTrades) ||
+              !Number.isInteger(result.closedTradeMetrics?.tradeCount) ||
+              result.closedTradeMetrics.tradeCount !== result.closedTrades.length ||
+              !Number.isFinite(result.closedTradeMetrics?.netProfitR) ||
+              !Number.isFinite(result.closedTradeMetrics?.maxDrawdownR) ||
+              !result.closedTrades.every(isValidTrade)
+            ) return false;
+
+            const tradeKeys = result.closedTrades.map(trade =>
+              [trade.signalTime, trade.side].join("|")
+            );
+            return new Set(tradeKeys).size === tradeKeys.length;
+          };
+
           const validForwardPayload =
             response?.ok === true &&
             payload?.ok === true &&
+            payload?.schemaVersion === 2 &&
+            payload?.mode === "OUT_OF_SAMPLE_FORWARD_TEST" &&
+            payload?.symbol === "XAU/USD" &&
+            payload?.timeframe === "H1 + COMPLETED H4" &&
+            payload?.startTime === "2026-11-26T20:00:00.000Z" &&
             payload?.warmupComplete === true &&
+            payload?.executionStatus === "RESEARCH_ONLY_NOT_TRADE_READY" &&
+            Number.isInteger(payload?.forwardCandleCount) &&
+            payload.forwardCandleCount >= 0 &&
             resultsCandidate.length === expectedSlippage.length &&
-            expectedSlippage.every(value => resultsCandidate.some(result =>
-              result?.slippagePerSideUSD === value &&
-              Array.isArray(result.closedTrades) &&
-              Number.isInteger(result.closedTradeMetrics?.tradeCount) &&
-              result.closedTradeMetrics.tradeCount === result.closedTrades.length
-            ));
+            expectedSlippage.every(value =>
+              resultsCandidate.filter(result => result?.slippagePerSideUSD === value).length === 1 &&
+              resultsCandidate.some(result => isValidResult(result, value))
+            );
 
           ledger.lastCheckedAt = checkedAt;
           if (!validForwardPayload) {

@@ -638,6 +638,7 @@ module.exports = async function handler(req, res) {
 
       return res.status(200).json({
         ok: true,
+        schemaVersion: 2,
         engine: "QUANT PRO XAUUSD FORWARD TEST V2",
         mode: "OUT_OF_SAMPLE_FORWARD_TEST",
         symbol: SYMBOL,
