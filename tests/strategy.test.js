@@ -112,6 +112,17 @@ test("live signal entry and risk levels are based on the current provider quote 
   assert.equal(signal.executionStatus, "RESEARCH_ONLY_NOT_TRADE_READY");
 });
 
+test("live engine rejects missing, future and stale completed H1 candle data", () => {
+  const now = Date.UTC(2026, 10, 26, 20, 30, 0);
+  const fresh = [candle(now - 2 * 3600000, 2600)];
+  const stale = [candle(now - 4 * 3600000, 2600)];
+  const future = [candle(now, 2600)];
+  assert.equal(live.checkLatestCompletedH1Freshness(fresh, now).fresh, true);
+  assert.equal(live.checkLatestCompletedH1Freshness(stale, now).reason, "H1_CANDLES_STALE");
+  assert.equal(live.checkLatestCompletedH1Freshness(future, now).reason, "H1_CANDLE_CLOSE_TIME_INVALID");
+  assert.equal(live.checkLatestCompletedH1Freshness([], now).reason, "H1_CANDLES_UNAVAILABLE");
+});
+
 test("live signal identity is stable for one completed H1 setup and changes on the next H1 close", () => {
   const base = Date.UTC(2026, 0, 5, 0, 0, 0);
   const data = Array.from({ length: 500 }, (_, i) =>
