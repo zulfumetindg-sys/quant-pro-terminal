@@ -19,25 +19,37 @@ function parseTime(value) {
 
 function normalizeCandles(values) {
   const now = Date.now();
+  const byTime = new Map();
 
-  return values.map(c => {
-    const time = parseTime(c.datetime);
-    return {
+  for (const raw of values) {
+    const time = parseTime(raw.datetime);
+    const candle = {
       time,
-      datetime: Number.isFinite(time)
-        ? new Date(time).toISOString()
-        : null,
-      open: Number(c.open),
-      high: Number(c.high),
-      low: Number(c.low),
-      close: Number(c.close)
+      datetime: Number.isFinite(time) ? new Date(time).toISOString() : null,
+      open: Number(raw.open),
+      high: Number(raw.high),
+      low: Number(raw.low),
+      close: Number(raw.close)
     };
-  }).filter(c =>
-    Number.isFinite(c.time) &&
-    c.time + 3600000 <= now &&
-    [c.open, c.high, c.low, c.close].every(Number.isFinite) &&
-    c.high >= c.low
-  ).sort((a, b) => a.time - b.time);
+
+    const validPrices = [candle.open, candle.high, candle.low, candle.close]
+      .every(Number.isFinite);
+    const validOHLC = validPrices &&
+      candle.high >= Math.max(candle.open, candle.close, candle.low) &&
+      candle.low <= Math.min(candle.open, candle.close, candle.high);
+
+    if (
+      !Number.isFinite(time) ||
+      time % 3600000 !== 0 ||
+      time + 3600000 > now ||
+      !validOHLC
+    ) continue;
+
+    // A provider may repeat a timestamp. Keep exactly one completed bar.
+    byTime.set(time, candle);
+  }
+
+  return [...byTime.values()].sort((a, b) => a.time - b.time);
 }
 
 function emaSeries(values, period) {
@@ -379,7 +391,7 @@ module.exports = async function handler(req, res) {
 
     url.searchParams.set("symbol", SYMBOL);
     url.searchParams.set("interval", "1h");
-    url.searchParams.set("outputsize", "200");
+    url.searchParams.set("outputsize", "5000");
     url.searchParams.set("timezone", "UTC");
 
     const response = await fetch(url, {
@@ -444,7 +456,7 @@ module.exports = async function handler(req, res) {
 
     const payload = {
       ok: true,
-      engine: "QUANT PRO XAUUSD SIGNAL ENGINE V8",
+      engine: "QUANT PRO XAUUSD SIGNAL ENGINE V9",
       mode: "SIGNALS_ONLY",
       market: MARKET,
       symbol: SYMBOL,
@@ -486,3 +498,4 @@ module.exports = async function handler(req, res) {
     });
   }
 };
+\n\n// Export pure functions for deterministic automated tests. The default export remains the Vercel handler.\nmodule.exports.__test = { parseTime, normalizeCandles, emaSeries, ema, aggregateH4, calculateMACDHistogram, calculateATR, analyzeTrend, createSignal };\n
