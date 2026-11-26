@@ -371,6 +371,30 @@ function summarizeVolatilityDiagnostics(trades) {
   };
 }
 
+function summarizeVolatilityOutcomes(trades) {
+  const buckets = [
+    { label: "LT_1_0", min: 0, max: 1 },
+    { label: "1_0_TO_1_5", min: 1, max: 1.5 },
+    { label: "1_5_TO_2_0", min: 1.5, max: 2 },
+    { label: "2_0_TO_3_0", min: 2, max: 3 },
+    { label: "GTE_3_0", min: 3, max: Infinity }
+  ];
+  return {
+    interpretation: "EXPLORATORY_DESCRIPTIVE_BINS_NOT_VALIDATED_FILTERS",
+    buckets: buckets.map(bucket => {
+      const matched = trades.filter(trade => {
+        const ratio = trade?.volatilityShock?.ratio;
+        return Number.isFinite(ratio) && ratio >= bucket.min && ratio < bucket.max;
+      });
+      return {
+        bucket: bucket.label,
+        sampleCount: matched.length,
+        metrics: getMetrics(matched)
+      };
+    })
+  };
+}
+
 function runBacktest(candles, h4, indicators, slippage, period) {
   const trades = [];
   const periodStart = Date.parse(period.start);
@@ -439,6 +463,8 @@ function runBacktest(candles, h4, indicators, slippage, period) {
     targetR: TARGET_R,
     metrics: getMetrics(trades),
     volatilityDiagnostics: summarizeVolatilityDiagnostics([...trades, openTrade]),
+    volatilityOutcomes: summarizeVolatilityOutcomes(trades),
+    volatilityOutcomes: summarizeVolatilityOutcomes(trades),
     openTrade,
     lastTrades: trades.slice(-10)
   };
@@ -803,6 +829,6 @@ module.exports = async function handler(req, res) {
 // Export pure strategy functions for the Node test runner. The default export remains the Vercel handler.
 module.exports.__test = {
   parseTime, emaSeries, ema, makeH4, trend, buildIndicators,
-  getMetrics, getSignal, calculateTrade, runBacktest, runForwardTest, summarizeVolatilityDiagnostics,
+  getMetrics, getSignal, calculateTrade, runBacktest, runForwardTest, summarizeVolatilityDiagnostics, summarizeVolatilityOutcomes,
   hasForwardWarmup, hasForwardContinuity
 };
