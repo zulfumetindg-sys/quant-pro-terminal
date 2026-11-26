@@ -469,11 +469,13 @@ test("manual journal requires a strong exact bearer token and compares it safely
 
 test("manual journal accepts only fresh XAUUSD BUY or SELL signals with at least 1.8R at actual fill", () => {
   const now = Date.UTC(2026, 10, 26, 22, 0, 0);
+  const candleClosedAt = now - 30 * 60000;
   const signal = {
     symbol: "XAUUSD",
     status: "BUY",
-    signalId: "XAUUSD:BUY:1795730400000",
-    signalValidUntil: new Date(now + 3600000).toISOString(),
+    signalId: "XAUUSD:BUY:" + candleClosedAt,
+    signalCandleClosedAt: new Date(candleClosedAt).toISOString(),
+    signalValidUntil: new Date(candleClosedAt + 3600000).toISOString(),
     entry: 2650,
     sl: 2640,
     tp: 2670
@@ -481,12 +483,15 @@ test("manual journal accepts only fresh XAUUSD BUY or SELL signals with at least
   const valid = journal.validateOpenPayload({ signal, fillPrice: 2650 }, now);
   assert.equal(valid.ok, true);
   assert.equal(valid.trade.actualFillRiskReward, 2);
+  assert.equal(valid.trade.actualFillDistancePercent, 0);
   assert.equal(valid.trade.status, "OPEN");
   assert.equal(valid.trade.costs, "NOT_INCLUDED");
 
   assert.equal(journal.validateOpenPayload({ signal: { ...signal, symbol: "EURUSD" }, fillPrice: 2650 }, now).error, "XAUUSD_ONLY");
   assert.equal(journal.validateOpenPayload({ signal: { ...signal, status: "WAIT" }, fillPrice: 2650 }, now).error, "LIVE_BUY_OR_SELL_REQUIRED");
-  assert.equal(journal.validateOpenPayload({ signal: { ...signal, signalValidUntil: new Date(now - 1).toISOString() }, fillPrice: 2650 }, now).error, "SIGNAL_EXPIRED_OR_INVALID");
+  const expiredClose = now - 3600001;
+  assert.equal(journal.validateOpenPayload({ signal: { ...signal, signalId: "XAUUSD:BUY:" + expiredClose, signalCandleClosedAt: new Date(expiredClose).toISOString(), signalValidUntil: new Date(expiredClose + 3600000).toISOString() }, fillPrice: 2650 }, now).error, "SIGNAL_EXPIRED_OR_INVALID");
+  assert.equal(journal.validateOpenPayload({ signal, fillPrice: 2653 }, now).error, "ACTUAL_FILL_TOO_FAR_FROM_SIGNAL");
   assert.equal(journal.validateOpenPayload({ signal, fillPrice: 2659 }, now).error, "ACTUAL_FILL_RR_BELOW_1_8");
 });
 
