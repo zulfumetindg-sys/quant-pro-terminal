@@ -112,6 +112,28 @@ test("live signal entry and risk levels are based on the current provider quote 
   assert.equal(signal.executionStatus, "RESEARCH_ONLY_NOT_TRADE_READY");
 });
 
+test("live signal identity is stable for one completed H1 setup and changes on the next H1 close", () => {
+  const base = Date.UTC(2026, 0, 5, 0, 0, 0);
+  const data = Array.from({ length: 500 }, (_, i) =>
+    candle(base + i * 3600000, 2000 + i * 0.25, 0.8)
+  );
+  const first = live.createSignal(data, live.aggregateH4(data), data[data.length - 1].close);
+  const repeated = live.createSignal(data, live.aggregateH4(data), data[data.length - 1].close + 0.05);
+
+  assert.equal(first.status, "BUY");
+  assert.equal(repeated.signalId, first.signalId);
+  assert.equal(first.signalCandleClosedAt, new Date(data[data.length - 1].time + 3600000).toISOString());
+  assert.equal(first.signalValidUntil, new Date(data[data.length - 1].time + 2 * 3600000).toISOString());
+
+  const next = [
+    ...data,
+    candle(data[data.length - 1].time + 3600000, data[data.length - 1].close + 0.25, 0.8)
+  ];
+  const nextSignal = live.createSignal(next, live.aggregateH4(next), next[next.length - 1].close);
+  assert.equal(nextSignal.status, "BUY");
+  assert.notEqual(nextSignal.signalId, first.signalId);
+});
+
 test("live signal and historical engine agree on identical completed H1/H4 data and entry quote", () => {
   const base = Date.UTC(2026, 0, 5, 0, 0, 0);
   const data = Array.from({ length: 500 }, (_, i) =>
