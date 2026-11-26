@@ -1,0 +1,10 @@
+{
+  "name": "quant-pro-terminal",
+  "version": "0.8.0",
+  "private": true,
+  "description": "XAUUSD research-only signal terminal",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test"
+  }
+}
