@@ -418,3 +418,15 @@ test("completed historical period may close a still-open trade at its final cand
   assert.equal(result.openTrade, null);
   assert.ok(result.metrics.tradeCount >= 1);
 });
+
+test("WAIT responses retain volatility shock diagnostics", () => {
+  const base = Date.UTC(2026, 0, 5, 0, 0, 0);
+  const data = Array.from({ length: 80 }, (_, i) =>
+    candle(base + i * 3600000, 2300 + i * 0.1, 1)
+  );
+  const signal = live.createSignal(data, live.aggregateH4(data), null);
+  assert.equal(signal.status, "WAIT");
+  assert.equal(signal.reason, "LIVE_QUOTE_UNAVAILABLE");
+  assert.equal(signal.volatilityShock.available, true);
+  assert.equal(signal.volatilityShock.blocking, false);
+});
