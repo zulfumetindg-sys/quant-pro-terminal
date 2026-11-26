@@ -228,3 +228,11 @@ test("stale and future last_quote_at values are rejected", async () => {
     Date.now = originalNow;
   }
 });
+
+
+test("forward test refuses to run without its original 100-hour warmup history", () => {
+  const start = Date.UTC(2026, 10, 26, 20, 0, 0);
+  assert.equal(backtest.hasForwardWarmup([{ time: start - 100 * 3600000 }], start), true);
+  assert.equal(backtest.hasForwardWarmup([{ time: start - 99 * 3600000 }], start), false);
+  assert.equal(backtest.hasForwardWarmup([], start), false);
+});
