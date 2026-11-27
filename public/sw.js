@@ -49,11 +49,13 @@ self.addEventListener("push",event=>{
   let payload={};
   try{payload=event.data?event.data.json():{};}catch(_){}
   const title=typeof payload.title==="string"?payload.title:"QUANT PRO · XAUUSD";
+  const requestedUrl=payload.data&&typeof payload.data.url==="string"?payload.data.url:"./";
+  const safeUrl=requestedUrl.startsWith("/")&&!requestedUrl.startsWith("//")?requestedUrl:"./";
   const options={
    body:typeof payload.body==="string"?payload.body:"Yeni piyasa bildirimi. Fiyatı uygulamada yeniden doğrula.",
    tag:typeof payload.tag==="string"?payload.tag:"quant-pro-market-update",
    renotify:false,
-   data:{url:"./"}
+   data:{url:safeUrl}
   };
   await self.registration.showNotification(title,options);
  })());
