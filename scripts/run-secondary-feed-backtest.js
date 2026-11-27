@@ -270,6 +270,27 @@ function summarize(trades) {
       sampleAdequacy: list.length >= 30 ? "DESCRIPTIVE_SAMPLE_30_PLUS" : "LOW_SAMPLE_INSUFFICIENT_FOR_FILTER_DECISION"
     }])
   );
+  // Year-by-year joint regime stability is descriptive only; bins are not filters.
+  const byEntryYearAndH4TrendAndVolatility = {};
+  for (const trade of ordered) {
+    const trendValue = trade?.trendDiagnostics?.h4EmaSpreadPercent;
+    const volatilityValue = trade?.volatilityShock?.ratio;
+    if (!Number.isFinite(trendValue) || !Number.isFinite(volatilityValue)) continue;
+    const trendBucket = trendBuckets.find(x => trendValue >= x.min && trendValue < x.max);
+    const volatilityBucket = volatilityBuckets.find(x => volatilityValue >= x.min && volatilityValue < x.max);
+    if (!trendBucket || !volatilityBucket) continue;
+    const year = new Date(trade.signalTime).getUTCFullYear();
+    const key = `${year}_${trendBucket.label}__${volatilityBucket.label}`;
+    (byEntryYearAndH4TrendAndVolatility[key] ||= []).push(trade);
+  }
+  const byEntryYearAndH4TrendAndVolatilitySummary = Object.fromEntries(
+    Object.entries(byEntryYearAndH4TrendAndVolatility).map(([key, list]) => [key, {
+      ...group(list),
+      BUY: group(list.filter(t => t.side === "BUY")),
+      SELL: group(list.filter(t => t.side === "SELL")),
+      sampleAdequacy: list.length >= 30 ? "DESCRIPTIVE_SAMPLE_30_PLUS" : "LOW_SAMPLE_INSUFFICIENT_FOR_FILTER_DECISION"
+    }])
+  );
   const byEntryYearAndVolatilityRegime = {};
   for (const trade of ordered) {
     const ratio = trade?.volatilityShock?.ratio;
@@ -318,6 +339,7 @@ function summarize(trades) {
     byMomentumStrength,
     byEntryYearAndH4TrendStrength: byEntryYearAndH4TrendStrengthSummary,
     byH4TrendAndVolatility: byH4TrendAndVolatilitySummary,
+    byEntryYearAndH4TrendAndVolatility: byEntryYearAndH4TrendAndVolatilitySummary,
     combinedRegimeInterpretation: "EXPLORATORY_DESCRIPTIVE_BINS_NOT_VALIDATED_FILTERS",
     trendStrengthInterpretation: "EXPLORATORY_DESCRIPTIVE_BINS_NOT_VALIDATED_FILTERS",
     volatilityRegimeInterpretation: "EXPLORATORY_DESCRIPTIVE_BINS_NOT_VALIDATED_FILTERS"
