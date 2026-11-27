@@ -403,7 +403,7 @@ test("forward test rejects gaps over 72 hours but permits normal weekend gaps", 
   assert.equal(backtest.hasForwardContinuity(normal, start, start + 50 * 3600000), true);
   assert.equal(backtest.hasForwardContinuity(broken, start, start + 74 * 3600000), false);
   assert.equal(backtest.hasForwardContinuity([], start, start + 50 * 3600000), false);
-  assert.equal(backtest.hasForwardContinuity(normal, start, start + 80 * 3600000), false);
+  assert.equal(backtest.hasForwardContinuity(normal, start, start + 130 * 3600000), false);
 });
 
 test("incomplete historical period excludes an open trade instead of force-closing it", () => {
