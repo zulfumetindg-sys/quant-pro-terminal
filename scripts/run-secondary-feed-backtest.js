@@ -94,12 +94,22 @@ function summarize(trades) {
     const gw = list.filter(t => t.netR > 0).reduce((a, t) => a + t.netR, 0);
     const gl = Math.abs(list.filter(t => t.netR < 0).reduce((a, t) => a + t.netR, 0));
     const net = list.reduce((a, t) => a + t.netR, 0);
+    const n = list.length;
+    const z = 1.96;
+    const p = n ? wins / n : null;
+    const denominator = n ? 1 + z * z / n : null;
+    const center = n ? (p + z * z / (2 * n)) / denominator : null;
+    const margin = n ? z * Math.sqrt((p * (1 - p) / n) + (z * z / (4 * n * n))) / denominator : null;
     return {
-      trades: list.length, wins, losses,
-      winRatePercent: list.length ? +(wins / list.length * 100).toFixed(2) : null,
+      trades: n, wins, losses,
+      winRatePercent: n ? +(p * 100).toFixed(2) : null,
+      winRateWilson95Percent: n ? [
+        +((center - margin) * 100).toFixed(2),
+        +((center + margin) * 100).toFixed(2)
+      ] : null,
       profitFactor: gl ? +(gw / gl).toFixed(3) : null,
       netR: +net.toFixed(3),
-      averageR: list.length ? +(net / list.length).toFixed(3) : null
+      averageR: n ? +(net / n).toFixed(3) : null
     };
   };
   const byMonth = {}, byYear = {}, byQuarter = {}, byHourUTC = {};
