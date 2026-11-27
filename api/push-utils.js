@@ -9,8 +9,7 @@ function backgroundPushConfigured(env = process.env) {
     !!env.VAPID_PRIVATE_KEY &&
     !!env.VAPID_SUBJECT &&
     !!env.KV_REST_API_URL &&
-    !!env.KV_REST_API_TOKEN &&
-    !!env.CRON_SECRET;
+    !!env.KV_REST_API_TOKEN;
 }
 
 function subscriptionEndpointAllowed(value) {
