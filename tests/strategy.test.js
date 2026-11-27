@@ -690,6 +690,7 @@ test("manual journal Redis HTTP failures are logged with safe metadata and retur
 
     assert.equal(res.code, 502);
     assert.equal(res.body.error, "JOURNAL_SERVICE_UNAVAILABLE");
+    assert.equal(res.body.diagnosticCode, "UPSTREAM_AUTH");
     assert.equal(logs.length, 1);
     assert.deepEqual(logs[0][1], {
       operation: "GET_STATE",
@@ -741,6 +742,7 @@ test("manual journal reports network failures without leaking credentials", asyn
 
     assert.equal(res.code, 502);
     assert.equal(res.body.error, "JOURNAL_SERVICE_UNAVAILABLE");
+    assert.equal(res.body.diagnosticCode, "UPSTREAM_NETWORK");
     assert.deepEqual(logs[0][1], { operation: "GET_STATE", code: "NETWORK" });
     assert.equal(JSON.stringify(logs).includes("redis-secret"), false);
   } finally {
