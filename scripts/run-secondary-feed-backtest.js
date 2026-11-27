@@ -177,6 +177,24 @@ function summarize(trades) {
   const summarizeMap = map => Object.fromEntries(
     Object.entries(map).map(([key, list]) => [key, group(list)])
   );
+  const volatilityBuckets = [
+    { label: "LT_1_0", min: 0, max: 1 },
+    { label: "1_0_TO_1_5", min: 1, max: 1.5 },
+    { label: "1_5_TO_2_0", min: 1.5, max: 2 },
+    { label: "2_0_TO_3_0", min: 2, max: 3 },
+    { label: "GTE_3_0", min: 3, max: Infinity }
+  ];
+  const byVolatilityRegime = Object.fromEntries(volatilityBuckets.map(bucket => {
+    const matched = ordered.filter(t => {
+      const ratio = t?.volatilityShock?.ratio;
+      return Number.isFinite(ratio) && ratio >= bucket.min && ratio < bucket.max;
+    });
+    return [bucket.label, {
+      ...group(matched),
+      BUY: group(matched.filter(t => t.side === "BUY")),
+      SELL: group(matched.filter(t => t.side === "SELL"))
+    }];
+  }));
   return {
     overall: group(ordered),
     historicalBlockBootstrap: blockBootstrap(ordered.map(t => t.netR)),
@@ -200,7 +218,9 @@ function summarize(trades) {
     byExitMonth: summarizeMap(byMonth),
     byExitHourUTC: summarizeMap(byHourUTC),
     byEntryHourUTC: summarizeMap(byEntryHourUTC),
-    byEntryHourUTCAndSide: summarizeMap(byEntryHourUTCAndSide)
+    byEntryHourUTCAndSide: summarizeMap(byEntryHourUTCAndSide),
+    byVolatilityRegime,
+    volatilityRegimeInterpretation: "EXPLORATORY_DESCRIPTIVE_BINS_NOT_VALIDATED_FILTERS"
   };
 }
 
