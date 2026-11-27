@@ -106,6 +106,12 @@ function parseRedisState(raw) {
   return state;
 }
 
+function storageError(message, diagnosticCode) {
+  const error = new Error(message);
+  error.diagnosticCode = diagnosticCode;
+  return error;
+}
+
 function providerErrorCategory(message) {
   const value = String(message || "").toLowerCase();
   if (/unauthorized|invalid.*token|wrongpass|noauth|authentication/.test(value)) return "AUTH";
@@ -136,7 +142,7 @@ async function redisCommand(path, method, body, env, operation) {
       ? "TIMEOUT"
       : "NETWORK";
     console.error("[manual-journal] Redis request failed", { operation, code });
-    throw new Error("JOURNAL_STORAGE_UNAVAILABLE");
+    throw storageError("JOURNAL_STORAGE_UNAVAILABLE", code === "TIMEOUT" ? "UPSTREAM_TIMEOUT" : "UPSTREAM_NETWORK");
   }
 
   let payload;
@@ -147,23 +153,25 @@ async function redisCommand(path, method, body, env, operation) {
       operation,
       httpStatus: response.status
     });
-    throw new Error("JOURNAL_STORAGE_UNAVAILABLE");
+    throw storageError("JOURNAL_STORAGE_UNAVAILABLE", "UPSTREAM_INVALID_RESPONSE");
   }
 
   if (!response.ok) {
+    const category = providerErrorCategory(payload && payload.error);
     console.error("[manual-journal] Redis HTTP error", {
       operation,
       httpStatus: response.status,
-      providerCategory: providerErrorCategory(payload && payload.error)
+      providerCategory: category
     });
-    throw new Error("JOURNAL_STORAGE_UNAVAILABLE");
+    throw storageError("JOURNAL_STORAGE_UNAVAILABLE", "UPSTREAM_" + category);
   }
   if (payload && payload.error) {
+    const category = providerErrorCategory(payload.error);
     console.error("[manual-journal] Redis command error", {
       operation,
-      providerCategory: providerErrorCategory(payload.error)
+      providerCategory: category
     });
-    throw new Error("JOURNAL_STORAGE_COMMAND_FAILED");
+    throw storageError("JOURNAL_STORAGE_COMMAND_FAILED", "UPSTREAM_COMMAND_" + category);
   }
   return payload.result;
 }
@@ -300,7 +308,8 @@ module.exports = async function handler(req, res) {
       ok: false,
       error: error.message === "JOURNAL_STORAGE_NOT_CONFIGURED"
         ? "JOURNAL_STORAGE_NOT_CONFIGURED"
-        : "JOURNAL_SERVICE_UNAVAILABLE"
+        : "JOURNAL_SERVICE_UNAVAILABLE",
+      ...(error.diagnosticCode ? { diagnosticCode: error.diagnosticCode } : {})
     });
   }
 };
