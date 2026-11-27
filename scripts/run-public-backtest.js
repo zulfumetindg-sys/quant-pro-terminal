@@ -56,7 +56,38 @@ for (const slippage of [0.10, 0.20]) {
   }
 }
 
-const report = {
+
+const aggregateBySlippage = [0.10, 0.20].map(slippage => {
+  const included = results.filter(x =>
+    x.slippagePerSideUSD === slippage &&
+    x.periodStatus === "PERIOD_COMPLETE" &&
+    x.metrics
+  );
+  const tradeCount = included.reduce((sum, x) => sum + x.metrics.tradeCount, 0);
+  const winCount = included.reduce((sum, x) => sum + x.metrics.winCount, 0);
+  const lossCount = included.reduce((sum, x) => sum + x.metrics.lossCount, 0);
+  const grossWinR = included.reduce((sum, x) => sum + x.metrics.grossWinR, 0);
+  const grossLossR = included.reduce((sum, x) => sum + x.metrics.grossLossR, 0);
+  const netProfitR = included.reduce((sum, x) => sum + x.metrics.netProfitR, 0);
+  return {
+    slippagePerSideUSD: slippage,
+    completedPeriodsIncluded: included.map(x => x.period),
+    tradeCount,
+    winCount,
+    lossCount,
+    winRatePercent: tradeCount ? Number((winCount / tradeCount * 100).toFixed(2)) : null,
+    profitFactor: grossLossR > 0 ? Number((grossWinR / grossLossR).toFixed(3)) : null,
+    netProfitR: Number(netProfitR.toFixed(2)),
+    averageR: tradeCount ? Number((netProfitR / tradeCount).toFixed(3)) : null,
+    grossWinR: Number(grossWinR.toFixed(3)),
+    grossLossR: Number(grossLossR.toFixed(3)),
+    worstSinglePeriodMaxDrawdownR: included.length
+      ? Math.max(...included.map(x => x.metrics.maxDrawdownR))
+      : null,
+    note: "Worst drawdown among included periods; not a combined chronological drawdown."
+  };
+});
+\nconst report = {
   report: "QUANT_PRO_EXACT_ENGINE_PUBLIC_DATA_CROSS_CHECK",
   engine: "api/backtest.js current branch implementation",
   provider: "GetData public XAUUSD 1H sample",
