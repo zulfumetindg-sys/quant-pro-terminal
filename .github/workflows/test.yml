@@ -2,7 +2,7 @@ name: QUANT PRO regression tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/mobile-signal-alerts]
   pull_request:
     branches: [main, feature/signal-identity]
 
@@ -16,5 +16,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Verify Web Push dependency
+        run: node -e "require('web-push')"
       - name: Run deterministic strategy tests
         run: npm test
