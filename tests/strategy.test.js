@@ -955,14 +955,25 @@ test("manual journal rejects malformed mutation payloads instead of returning fa
       status: 200,
       json: async () => ({ result: "not-json" })
     });
+    const closedAt = Date.now() - 30 * 60000;
+    const signal = {
+      symbol: "XAUUSD",
+      status: "BUY",
+      signalId: "XAUUSD:BUY:" + closedAt,
+      signalCandleClosedAt: new Date(closedAt).toISOString(),
+      signalValidUntil: new Date(closedAt + 3600000).toISOString(),
+      entry: 2650,
+      sl: 2640,
+      tp: 2670
+    };
     await handler({
       method: "POST",
       headers: { authorization: "Bearer " + token },
-      body: { action: "open", signal: {}, fillPrice: 2650 }
+      body: { action: "open", signal, fillPrice: 2650 }
     }, res);
-    // Invalid signal is rejected before Redis is called.
-    assert.equal(res.code, 400);
-    assert.equal(res.body.error, "SIGNAL_ID_INVALID");
+    assert.equal(res.code, 502);
+    assert.equal(res.body.error, "JOURNAL_SERVICE_UNAVAILABLE");
+    assert.equal(res.body.diagnosticCode, "UPSTREAM_INVALID_RESPONSE");
   } finally {
     global.fetch = originalFetch;
     if (saved.access === undefined) delete process.env.JOURNAL_ACCESS_TOKEN;
