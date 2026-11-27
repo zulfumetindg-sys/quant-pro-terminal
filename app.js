@@ -41,11 +41,11 @@ function renderSignal(signal) {
 
   html += '<div class="signal-grid">' +
     '<div><small>Doğrulanmış sağlayıcı fiyatı</small><b>' + fmt(signal.currentPrice) + '</b></div>' +
-    '<div><small>Giriş referansı</small><b>' + fmt(signal.entry) + '</b></div>' +
+    '<div><small>Varsayımsal giriş (güncel fiyat)</small><b>' + fmt(signal.entry) + '</b></div>' +
     '<div><small>Stop loss</small><b>' + fmt(signal.sl) + '</b></div>' +
     '<div><small>Take profit</small><b>' + fmt(signal.tp) + '</b></div>' +
     '<div><small>Brüt risk / getiri (maliyet öncesi)</small><b>' + esc(signal.riskReward || "—") + '</b></div>' +
-    '<div><small>Giriş mesafesi</small><b>' + (signal.entryDistancePercent == null ? "—" : esc(signal.entryDistancePercent) + "%") + '</b></div>' +
+    '<div><small>Son tamamlanmış H1 kapanışına mesafe</small><b>' + (signal.entryDistancePercent == null ? "—" : esc(signal.entryDistancePercent) + "%") + '</b></div>' +
     '<div><small>Geçmiş kazanma oranı</small><b>' + esc(signal.historicalWinProbability || "UNAVAILABLE") + '</b></div>' +
     '<div><small>H1 / H4 trendi</small><b>' + trend(signal.h1Trend) + ' / ' + trend(signal.h4Trend) + '</b></div>' +
     '<div><small>Son H1 volatilite / önceki 14 H1 ortalaması</small><b>' +
@@ -148,7 +148,7 @@ function loadFreeAnalysis() {
     INSUFFICIENT_H1_H4_DATA: "Tamamlanmış H1/H4 mum sayısı yetersiz.",
     H1_H4_NOT_ALIGNED: "H1 ve H4 yönleri aynı değil. Zaman dilimleri uyuşmadığı için işlem açılmıyor.",
     MACD_HISTOGRAM_NOT_CONFIRMED: "MACD histogramı seçilen yönü doğrulamıyor.",
-    ENTRY_TOO_FAR_FROM_PRICE: "Fiyat giriş referansından izin verilen %0,10 sınırından uzakta.",
+    ENTRY_TOO_FAR_FROM_PRICE: "Güncel fiyat, son tamamlanmış H1 kapanışından izin verilen %0,10 sınırından fazla uzaklaştı. Fiyat kovalanmadı; yeni H1 koşulu bekleniyor.",
     ATR_UNAVAILABLE: "ATR verisi hesaplanamadı; zarar durdur ve hedef güvenilir biçimde belirlenemiyor."
   };
 
@@ -169,12 +169,12 @@ function loadFreeAnalysis() {
       lines.push("MACD histogramı: veri yok.");
     }
     lines.push("ATR(14): " + (s.atr == null ? "veri yok" : s.atr) + " · stop mesafesi volatiliteye göre hesaplandı.");
-    lines.push("Risk/getiri: " + (s.riskReward || "hesaplanamadı") + " (spread/kayma/komisyon öncesi) · giriş mesafesi: " +
+    lines.push("Risk/getiri: " + (s.riskReward || "hesaplanamadı") + " (spread/kayma/komisyon öncesi) · son tamamlanmış H1 kapanışına mesafe: " +
       (s.entryDistancePercent == null ? "bilinmiyor" : s.entryDistancePercent + "%") + ".");
     lines.push("Giriş: " + (s.entry ?? "—") + " · SL: " + (s.sl ?? "—") + " · TP: " + (s.tp ?? "—"));
   } else {
     lines.push("İşlem açılmama nedeni: " + (reasonText[s.reason] || s.reason || "Gerekli koşullar birlikte oluşmadı."));
-    if (s.entryDistancePercent != null) lines.push("Fiyat-giriş mesafesi: " + s.entryDistancePercent + "%.");
+    if (s.entryDistancePercent != null) lines.push("Güncel fiyatın son tamamlanmış H1 kapanışına mesafesi: " + s.entryDistancePercent + "% (izin verilen üst sınır %0,10).");
     if (s.macdHistogram != null) lines.push("MACD histogramı: " + s.macdHistogram + ".");
   }
 
@@ -243,7 +243,26 @@ function journalRequest(method, body) {
         FILL_PRICE_OUTSIDE_RISK_LEVELS: "Giriş fiyatı SL/TP seviyelerinin dışında.",
         UNAUTHORIZED: "Kayıt anahtarı geçersiz."
       };
-      throw new Error(messages[payload.error] || payload.error || "Kayıt isteği başarısız.");
+      const diagnosticMessages = {
+        UPSTREAM_AUTH: "Veritabanı kimlik doğrulaması reddedildi. Upstash REST URL ve REST Token aynı veritabanından alınmalı.",
+        UPSTREAM_COMMAND: "Veritabanı komutu reddedildi. Sunucu tarafındaki Redis komut uyumluluğu kontrol edilmeli.",
+        UPSTREAM_RATE_LIMIT: "Veritabanı istek sınırına ulaşıldı. Bir süre sonra tekrar deneyin.",
+        UPSTREAM_TIMEOUT: "Veritabanı zaman aşımına uğradı. Upstash bağlantısını kontrol edin.",
+        UPSTREAM_NETWORK: "Sunucu veritabanına bağlanamıyor. Upstash REST bağlantısını kontrol edin.",
+        UPSTREAM_INVALID_RESPONSE: "Veritabanından beklenmeyen yanıt geldi.",
+        UPSTREAM_PROVIDER_ERROR: "Veritabanı sağlayıcısı isteği reddetti.",
+        UPSTREAM_COMMAND_AUTH: "Veritabanı komutu için kimlik doğrulama reddedildi.",
+        UPSTREAM_COMMAND_COMMAND: "Veritabanı komutu desteklenmiyor veya hatalı.",
+        UPSTREAM_COMMAND_RATE_LIMIT: "Veritabanı istek sınırına ulaşıldı.",
+        UPSTREAM_COMMAND_TIMEOUT: "Veritabanı komutu zaman aşımına uğradı.",
+        UPSTREAM_COMMAND_PROVIDER_ERROR: "Veritabanı komutu sağlayıcı tarafından reddedildi."
+      };
+      throw new Error(
+        messages[payload.error] ||
+        diagnosticMessages[payload.diagnosticCode] ||
+        payload.error ||
+        "Kayıt isteği başarısız."
+      );
     }
     return payload;
   });
