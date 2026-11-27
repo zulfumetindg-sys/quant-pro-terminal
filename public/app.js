@@ -199,12 +199,17 @@ async function loadBacktest() {
       ' · Spread: ' + esc(payload.costModel && payload.costModel.spreadUSD) +
       ' · Kayma: işlem başına yön bazında $0.10 / $0.20 senaryoları</p>' +
       periods.map(period => {
-        if (period.periodStatus === "PERIOD_WARMUP_INCOMPLETE" || !period.metrics) {
+        if (period.periodStatus === "PERIOD_WARMUP_INCOMPLETE" || period.periodStatus === "PERIOD_DATA_GAP" || !period.metrics) {
+          const warmupMissing = period.periodStatus === "PERIOD_WARMUP_INCOMPLETE";
+          const detail = warmupMissing
+            ? '<span>H1 geçmişi: ' + esc(period.warmupAvailable && period.warmupAvailable.completedH1) + '/400</span>' +
+              '<span>H4 geçmişi: ' + esc(period.warmupAvailable && period.warmupAvailable.completedH4) + '/100</span>' +
+              '<span>Gösterge ısınma verisi yetersiz</span>'
+            : '<span>Veri boşluğu kontrolü başarısız</span>' +
+              '<span>İzin verilen en uzun boşluk: ' + esc(period.maximumAllowedGapHours || 72) + ' saat</span>' +
+              '<span>' + esc(period.warning || "Eksik veri nedeniyle performans hesaplanmadı.") + '</span>';
           return '<div class="backtest-row"><b>' + esc(period.period) + ' · Kayma/yan: ' + esc(period.slippagePerSideUSD) + '</b>' +
-            '<span>Performans: HESAPLANMADI</span>' +
-            '<span>H1 geçmişi: ' + esc(period.warmupAvailable && period.warmupAvailable.completedH1) + '/400</span>' +
-            '<span>H4 geçmişi: ' + esc(period.warmupAvailable && period.warmupAvailable.completedH4) + '/100</span>' +
-            '<span>Gösterge ısınma verisi yetersiz</span></div>';
+            '<span>Performans: HESAPLANMADI</span>' + detail + '</div>';
         }
         return '<div class="backtest-row"><b>' + esc(period.period) + ' · Kayma/yan: ' + esc(period.slippagePerSideUSD) + '</b>' +
           '<span>İşlem: ' + esc(period.metrics.tradeCount) + '</span>' +
