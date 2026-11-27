@@ -39,6 +39,76 @@ test("historical candle normalization deduplicates, validates OHLC and excludes 
   assert.equal(candles[0].close, 102);
 });
 
+test("historical backtest handler fetches every period with its own bounded warmup window", async () => {
+  const originalFetch = global.fetch;
+  const originalKey = process.env.TWELVE_DATA_API_KEY;
+  const calls = [];
+  const start = Date.parse("2026-04-01T00:00:00Z");
+  const lastClosedHour = Math.floor(Date.now() / 3600000) * 3600000 - 3600000;
+  const values = [];
+  for (let time = start, index = 0; time <= lastClosedHour; time += 3600000, index++) {
+    const mid = 2300 + index * 0.015 + 4 * Math.sin(index / 8) + 2 * Math.sin(index / 3);
+    values.push({
+      datetime: new Date(time).toISOString().slice(0, 19).replace("T", " "),
+      open: String(mid - 0.1),
+      high: String(mid + 1.4),
+      low: String(mid - 1.4),
+      close: String(mid + 0.1)
+    });
+  }
+
+  process.env.TWELVE_DATA_API_KEY = "unit-test-key";
+  global.fetch = async (url, options) => {
+    const parsed = new URL(url);
+    calls.push({ url: parsed, authorization: options?.headers?.Authorization });
+    const from = Date.parse(parsed.searchParams.get("start_date").replace(" ", "T") + "Z");
+    const to = Date.parse(parsed.searchParams.get("end_date").replace(" ", "T") + "Z");
+    return {
+      ok: true,
+      json: async () => ({
+        values: values.filter(item => {
+          const time = Date.parse(item.datetime.replace(" ", "T") + "Z");
+          return time >= from && time <= to;
+        })
+      })
+    };
+  };
+
+  const response = {
+    code: 200,
+    payload: null,
+    setHeader() { return this; },
+    status(code) { this.code = code; return this; },
+    json(payload) { this.payload = payload; return this; }
+  };
+
+  try {
+    await require("../api/backtest.js")({ method: "GET", query: {} }, response);
+    assert.equal(response.code, 200);
+    assert.equal(calls.length, 3);
+    assert.ok(calls.every(call => call.authorization === "apikey unit-test-key"));
+    assert.ok(calls.every(call => call.url.searchParams.has("start_date")));
+    assert.ok(calls.every(call => call.url.searchParams.has("end_date")));
+    assert.ok(calls.every(call => !call.url.searchParams.has("outputsize")));
+    assert.deepEqual(
+      calls.map(call => call.url.searchParams.get("start_date")),
+      ["2026-04-01 00:00:00", "2026-06-01 00:00:00", "2026-08-02 00:00:00"]
+    );
+    assert.deepEqual(
+      response.payload.results.map(result => result.warmupComplete),
+      [true, true, true]
+    );
+    assert.deepEqual(
+      response.payload.results.map(result => result.continuityComplete),
+      [true, true, true]
+    );
+  } finally {
+    global.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.TWELVE_DATA_API_KEY;
+    else process.env.TWELVE_DATA_API_KEY = originalKey;
+  }
+});
+
 test("root and public app bundles stay byte-identical", () => {
   const root = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
   const published = fs.readFileSync(path.join(__dirname, "..", "public", "app.js"), "utf8");
