@@ -600,6 +600,17 @@ function validateForwardTradeSequence(trades, openTrade, startTime = FORWARD_STA
   }
 
   const seen = new Set();
+  let previousSignalTime = start;
+  let previousExitTime = start;
+
+  const validGeometry = trade => {
+    if (![trade.entry, trade.stopLoss, trade.takeProfit].every(Number.isFinite) ||
+        trade.entry <= 0 || trade.stopLoss <= 0 || trade.takeProfit <= 0) return false;
+    return trade.side === "BUY"
+      ? trade.stopLoss < trade.entry && trade.takeProfit > trade.entry
+      : trade.takeProfit < trade.entry && trade.stopLoss > trade.entry;
+  };
+
   for (const trade of trades) {
     if (!trade || (trade.side !== "BUY" && trade.side !== "SELL")) {
       return { valid: false, reason: "INVALID_CLOSED_TRADE_SIDE" };
@@ -609,6 +620,12 @@ function validateForwardTradeSequence(trades, openTrade, startTime = FORWARD_STA
     if (!Number.isFinite(signalTime) || signalTime <= start) {
       return { valid: false, reason: "TRADE_NOT_STRICTLY_AFTER_FORWARD_START" };
     }
+    if (signalTime <= previousSignalTime) {
+      return { valid: false, reason: "NON_CHRONOLOGICAL_SIGNAL_SEQUENCE" };
+    }
+    if (signalTime <= previousExitTime) {
+      return { valid: false, reason: "OVERLAPPING_TRADE_SEQUENCE" };
+    }
     if (!Number.isFinite(exitTime) || exitTime <= signalTime || exitTime > now) {
       return { valid: false, reason: "INVALID_TRADE_EXIT_TIME" };
     }
@@ -616,9 +633,19 @@ function validateForwardTradeSequence(trades, openTrade, startTime = FORWARD_STA
       return { valid: false, reason: "DUPLICATE_SIGNAL_TIME" };
     }
     seen.add(signalTime);
-    if (![trade.entry, trade.stopLoss, trade.takeProfit, trade.exit, trade.netR].every(Number.isFinite)) {
+    if (!validGeometry(trade) || !Number.isFinite(trade.exit) || trade.exit <= 0 ||
+        !Number.isFinite(trade.netR)) {
       return { valid: false, reason: "INVALID_TRADE_PRICE_OR_RESULT" };
     }
+    const riskDistance = Math.abs(trade.entry - trade.stopLoss);
+    const expectedR = (trade.side === "BUY"
+      ? trade.exit - trade.entry
+      : trade.entry - trade.exit) / riskDistance;
+    if (!Number.isFinite(expectedR) || Math.abs(expectedR - trade.netR) > 0.002) {
+      return { valid: false, reason: "TRADE_RESULT_DOES_NOT_MATCH_EXIT_PRICE" };
+    }
+    previousSignalTime = signalTime;
+    previousExitTime = exitTime;
   }
 
   if (openTrade) {
@@ -626,6 +653,18 @@ function validateForwardTradeSequence(trades, openTrade, startTime = FORWARD_STA
     if (openTrade.open !== true || openTrade.status !== "OPEN_NOT_COUNTED" ||
         !Number.isFinite(signalTime) || signalTime <= start || seen.has(signalTime)) {
       return { valid: false, reason: "INVALID_OR_DUPLICATE_OPEN_TRADE" };
+    }
+    if (signalTime <= previousSignalTime) {
+      return { valid: false, reason: "NON_CHRONOLOGICAL_OPEN_TRADE" };
+    }
+    if (signalTime <= previousExitTime) {
+      return { valid: false, reason: "OVERLAPPING_OPEN_TRADE_SEQUENCE" };
+    }
+    if ((openTrade.side !== "BUY" && openTrade.side !== "SELL") ||
+        !validGeometry(openTrade) ||
+        !Number.isFinite(openTrade.lastPrice) || openTrade.lastPrice <= 0 ||
+        !Number.isFinite(openTrade.unrealizedR)) {
+      return { valid: false, reason: "INVALID_OPEN_TRADE_PRICE_OR_RESULT" };
     }
   }
 
