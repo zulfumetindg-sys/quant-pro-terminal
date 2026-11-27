@@ -183,9 +183,24 @@ function loadFreeAnalysis() {
   lines.push("RESEARCH_ONLY_NOT_TRADE_READY · Emir göndermez ve işlem kararını değiştirmez.");
   output.textContent = lines.join("\n");
 }
+let lastBacktestRequestAt = 0;
+const MIN_BACKTEST_REQUEST_MS = 5 * 60 * 1000;
+function allowBacktestRequest(output) {
+  const now = Date.now();
+  const remaining = MIN_BACKTEST_REQUEST_MS - (now - lastBacktestRequestAt);
+  if (lastBacktestRequestAt && remaining > 0) {
+    output.textContent = "API kotası koruma modu: yeni tarihsel/ileri test isteği için " +
+      Math.ceil(remaining / 60000) + " dakika bekle. Bu testler 5.000 mumluk ek veri isteği yapar.";
+    return false;
+  }
+  lastBacktestRequestAt = now;
+  return true;
+}
+
 async function loadBacktest() {
   const button = $("backtestBtn");
   const output = $("backtestResults");
+  if (!allowBacktestRequest(output)) return;
   button.disabled = true;
   button.textContent = "Geri test çalışıyor…";
   output.textContent = "Tarihsel altın mumları analiz ediliyor…";
@@ -239,6 +254,7 @@ async function loadBacktest() {
 async function loadForwardTest() {
   const button = $("forwardTestBtn");
   const output = $("forwardTestResults");
+  if (!allowBacktestRequest(output)) return;
   button.disabled = true;
   button.textContent = "İleri test kontrol ediliyor…";
   output.textContent = "Sabit başlangıç tarihinden sonraki tamamlanmış H1 mumları analiz ediliyor…";
