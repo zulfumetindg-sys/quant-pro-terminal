@@ -395,6 +395,31 @@ function summarizeVolatilityOutcomes(trades) {
   };
 }
 
+function hasPeriodContinuity(candles, periodStart, periodEnd, periodComplete) {
+  const periodCandles = candles.filter(
+    candle => candle.time >= periodStart && candle.time < periodEnd
+  );
+  if (periodCandles.length === 0) return false;
+
+  const maxGapMs = 72 * 3600000;
+  if (periodCandles[0].time - periodStart > maxGapMs) return false;
+
+  for (let i = 1; i < periodCandles.length; i++) {
+    if (periodCandles[i].time - periodCandles[i - 1].time > maxGapMs) {
+      return false;
+    }
+  }
+
+  // For a finished period, require its final candle to reach the boundary
+  // within the same conservative weekend/holiday gap allowance.
+  if (periodComplete) {
+    const lastClose = periodCandles[periodCandles.length - 1].time + 3600000;
+    if (periodEnd - lastClose > maxGapMs) return false;
+  }
+
+  return true;
+}
+
 function runBacktest(candles, h4, indicators, slippage, period) {
   const trades = [];
   const periodStart = Date.parse(period.start);
@@ -428,6 +453,27 @@ function runBacktest(candles, h4, indicators, slippage, period) {
     x => x.time >= periodEnd
   );
   const periodComplete = firstAfterPeriod >= 0;
+  const periodContinuity = hasPeriodContinuity(
+    candles, periodStart, periodEnd, periodComplete
+  );
+  if (!periodContinuity) {
+    return {
+      period: period.name,
+      periodComplete,
+      periodStatus: "PERIOD_DATA_GAP",
+      warmupComplete: true,
+      continuityComplete: false,
+      maximumAllowedGapHours: 72,
+      spreadUSD: SPREAD_USD,
+      slippagePerSideUSD: slippage,
+      metrics: null,
+      volatilityDiagnostics: null,
+      volatilityOutcomes: null,
+      openTrade: null,
+      lastTrades: [],
+      warning: "Test döneminde 72 saati aşan veri boşluğu veya dönem sınırına yakın yeterli mum bulunmadığı için performans hesaplanmadı."
+    };
+  }
 
   const lastIndex = periodComplete
     ? firstAfterPeriod - 1
@@ -480,6 +526,7 @@ function runBacktest(candles, h4, indicators, slippage, period) {
     period: period.name,
     periodComplete,
     periodStatus: periodComplete ? "PERIOD_COMPLETE" : "PERIOD_STILL_RUNNING",
+    continuityComplete: true,
     spreadUSD: SPREAD_USD,
     slippagePerSideUSD: slippage,
     entryReference: "NEXT_H1_OPEN_AFTER_SIGNAL",
