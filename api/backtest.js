@@ -570,7 +570,7 @@ function hasForwardWarmup(candles, forwardStart) {
   return true;
 }
 
-function hasForwardContinuity(candles, forwardStart) {
+function hasForwardContinuity(candles, forwardStart, now = Date.now()) {
   const forward = candles.filter(c => c.time >= forwardStart);
   // An empty forward window is missing evidence, not a continuous test period.
   if (forward.length === 0) return false;
@@ -581,6 +581,8 @@ function hasForwardContinuity(candles, forwardStart) {
   for (let i = 1; i < forward.length; i++) {
     if (forward[i].time - forward[i - 1].time > maxGapMs) return false;
   }
+  const lastClose = forward[forward.length - 1].time + 3600000;
+  if (!Number.isFinite(now) || now < lastClose || now - lastClose > maxGapMs) return false;
   return true;
 }
 
@@ -765,7 +767,7 @@ module.exports = async function handler(req, res) {
           maximumAllowedGapHours: 72,
           historyStatus: "FORWARD_CANDLE_SEQUENCE_INCOMPLETE",
           executionStatus: "RESEARCH_ONLY_NOT_TRADE_READY",
-          warning: "İleri test döneminde 72 saati aşan veri boşluğu bulundu. Eksik fiyat hareketleriyle performans hesaplanmadı."
+          warning: "İleri test döneminde 72 saati aşan veri boşluğu veya 72 saatten eski son mum bulundu. Eksik/güncel olmayan fiyatlarla performans hesaplanmadı."
         });
       }
 
