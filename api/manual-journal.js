@@ -116,7 +116,7 @@ function providerErrorCategory(message) {
 }
 
 async function redisCommand(path, method, body, env, operation) {
-  const base = String(env.KV_REST_API_URL || "").replace(/\\/+$/, "");
+  const base = String(env.KV_REST_API_URL || "").replace(/\/+$/, "");
   const token = env.KV_REST_API_TOKEN;
   if (!base || !token) throw new Error("JOURNAL_STORAGE_NOT_CONFIGURED");
 
