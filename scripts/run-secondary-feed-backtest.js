@@ -63,8 +63,19 @@ function summarize(trades) {
   let maxDDStart = null, maxDDEnd = null;
   let streak = 0, longest = 0, streakStart = null;
   let longestStreakStart = null, longestStreakEnd = null;
+  // Illustrative fixed-fraction account path: risk 0.5% of current equity per trade.
+  // This is a mathematical translation of R, not a broker-specific fill simulation.
+  let equityMultiplier = 1, equityPeak = 1, maxEquityDrawdownPercent = 0;
   for (const t of ordered) {
     equity += t.netR;
+    equityMultiplier *= Math.max(0, 1 + 0.005 * t.netR);
+    equityPeak = Math.max(equityPeak, equityMultiplier);
+    if (equityPeak > 0) {
+      maxEquityDrawdownPercent = Math.max(
+        maxEquityDrawdownPercent,
+        (equityPeak - equityMultiplier) / equityPeak * 100
+      );
+    }
     if (equity > peak) {
       peak = equity;
       peakTime = t.exitTime;
@@ -112,8 +123,11 @@ function summarize(trades) {
       averageR: n ? +(net / n).toFixed(3) : null
     };
   };
-  const byMonth = {}, byYear = {}, byQuarter = {}, byHourUTC = {};
+  const byMonth = {}, byYear = {}, byQuarter = {}, byHourUTC = {}, byEntryHourUTC = {};
   for (const t of ordered) {
+    const entryDate = new Date(t.signalTime);
+    const entryHour = String(entryDate.getUTCHours()).padStart(2, "0") + ":00";
+    (byEntryHourUTC[entryHour] ||= []).push(t);
     const date = new Date(t.exitTime);
     const year = String(date.getUTCFullYear());
     const month = t.exitTime.slice(0, 7);
@@ -130,6 +144,13 @@ function summarize(trades) {
   return {
     overall: group(ordered),
     chronologicalMaxDrawdownR: +maxDD.toFixed(3),
+    illustrativeRiskModel: {
+      riskPercentOfCurrentEquityPerTrade: 0.5,
+      finalEquityMultiplier: +equityMultiplier.toFixed(4),
+      totalReturnPercent: +((equityMultiplier - 1) * 100).toFixed(2),
+      maxPeakToTroughDrawdownPercent: +maxEquityDrawdownPercent.toFixed(2),
+      assumption: "Sequential trades; fixed 0.5% fractional risk per trade; each netR applied to current equity; excludes broker-specific lot rounding, margin, financing and execution constraints."
+    },
     maxDrawdownPeakTime: maxDDStart,
     maxDrawdownTroughTime: maxDDEnd,
     longestConsecutiveLosses: longest,
@@ -140,7 +161,8 @@ function summarize(trades) {
     byExitYear: summarizeMap(byYear),
     byExitQuarter: summarizeMap(byQuarter),
     byExitMonth: summarizeMap(byMonth),
-    byExitHourUTC: summarizeMap(byHourUTC)
+    byExitHourUTC: summarizeMap(byHourUTC),
+    byEntryHourUTC: summarizeMap(byEntryHourUTC)
   };
 }
 
