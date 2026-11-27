@@ -20,9 +20,6 @@ jobs:
     steps:
       - name: Request short-lived GitHub OIDC token
         id: oidc
-        env:
-          ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
-          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
         run: |
           set -euo pipefail
           response="$(curl --fail --silent --show-error \
