@@ -271,6 +271,22 @@ async function loadForwardTest() {
     if (!Array.isArray(payload.results) || !payload.results.length) {
       throw new Error("İleri test API'si geçerli sonuç döndürmedi.");
     }
+    const archive = window.QuantForwardArchive
+      ? window.QuantForwardArchive.capture(payload, window.localStorage)
+      : { ok: false, error: "ARCHIVE_HELPER_UNAVAILABLE" };
+    const archiveHtml = archive.ok
+      ? '<div class="backtest-row"><b>Cihazda ileri gözlem arşivi</b>' +
+        '<span>İzleme başlangıcı: ' + esc(new Date(archive.trackingStartedAt).toLocaleString("tr-TR")) + '</span>' +
+        '<span>Yeni kaydedilen kapanmış kayıt: ' + esc(archive.added) + ' · Toplam kayıt: ' + esc(archive.recordCount) + '</span>' +
+        archive.summaries.map(x => '<span>Kayma/yan ' + esc(x.slippagePerSideUSD) + ' · İşlem: ' + esc(x.tradeCount) +
+          ' · Kazanç/kayıp: ' + esc(x.wins) + '/' + esc(x.losses) +
+          ' · Net: ' + esc(x.netR) + 'R · ' +
+          (x.winRatePercent == null ? 'Örneklem yetersiz' : 'Gözlenen WR: ' + esc(x.winRatePercent) + '%') +
+          '</span>').join("") +
+        '<span>Değişen eski kayıt: ' + esc(archive.conflictCount) + ' · İlk kayıt korunur</span>' +
+        (archive.started ? '<span>İlk arşiv oluşturuldu. Bu andan önceki sinyaller arşive alınmadı.</span>' : '') +
+        '</div>'
+      : '<div class="backtest-row"><b>İleri gözlem arşivi kaydedilemedi</b><span>' + esc(archive.error) + '</span></div>';
     const rows = payload.results.map(item => {
       const m = item && item.closedTradeMetrics && typeof item.closedTradeMetrics === "object"
         ? item.closedTradeMetrics : null;
@@ -305,7 +321,8 @@ async function loadForwardTest() {
       '<p>Motor: ' + esc(payload.engine) + ' · Sabit başlangıç: ' + esc(payload.startTime) +
       ' · İleri dönem H1 mum: ' + esc(payload.forwardCandleCount) + '</p>' +
       rows.join("") +
-      '<p class="risk-note">Bu, sabit başlangıç tarihinden sonraki veriler üzerinde yeniden hesaplanan ileri dönem simülasyonudur; sunucuda kalıcı işlem günlüğü tutulmaz. İşlem tarihleri ve benzersiz sinyal kimlikleri kontrol edilir. 30 işlem yalnızca asgari örneklem eşiğidir. Canlı kazanma olasılığı değildir ve sistem trade-ready değildir. Gerçek XM spread, komisyon ve kayma doğrulanmamıştır.</p>';
+      archiveHtml +
+      '<p class="risk-note">Sabit başlangıçlı simülasyon her istekte yeniden hesaplanır. Ayrı cihaz-içi arşiv yalnızca ilk izleme başlangıcından sonra oluşan ve kapanan sinyalleri ilk gözlem değeriyle saklar; eski geçmiş işlemleri içeri almaz. Arşiv bu tarayıcıda kalır, sunucuya aktarılmaz ve tarayıcı verileri silinirse kaybolabilir. 30 işlem asgari örneklem eşiğidir; canlı kazanma olasılığı değildir. Gerçek XM spread, komisyon ve kayma doğrulanmamıştır.</p>';
   } catch (error) {
     output.textContent = "İleri test alınamadı: " + error.message;
   } finally {
