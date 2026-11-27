@@ -8,5 +8,8 @@
   },
   "scripts": {
     "test": "node --check app.js && node --check public/app.js && node --test"
+  },
+  "dependencies": {
+    "web-push": "^3.6.7"
   }
 }
