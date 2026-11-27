@@ -129,8 +129,10 @@ async function notifyNewSignal(signal) {
   try {
     const previousId = localStorage.getItem(SIGNAL_NOTIFICATION_KEY);
     const decision = window.QuantSignalNotifications.evaluate(signal, previousId, Date.now());
-    if (decision.nextId) localStorage.setItem(SIGNAL_NOTIFICATION_KEY, decision.nextId);
-    if (!decision.notify) return;
+    if (!decision.notify) {
+      if (decision.nextId) localStorage.setItem(SIGNAL_NOTIFICATION_KEY, decision.nextId);
+      return;
+    }
     const registration = await navigator.serviceWorker.ready;
     const sideLabel = signal.status === "BUY" ? "AL" : "SAT";
     await registration.showNotification("QUANT PRO · XAUUSD " + sideLabel, {
@@ -140,6 +142,7 @@ async function notifyNewSignal(signal) {
       renotify: false,
       data: { url: "./" }
     });
+    localStorage.setItem(SIGNAL_NOTIFICATION_KEY, decision.nextId);
     setSignalNotificationStatus("Yeni " + sideLabel + " sinyali için bildirim gönderildi. Fiyat ve koşulları panelden yeniden doğrula.");
   } catch (error) {
     setSignalNotificationStatus("Sinyal bildirimi gönderilemedi: " + error.message, true);
