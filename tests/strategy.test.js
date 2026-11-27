@@ -1630,3 +1630,59 @@ test("forward archive refuses malformed local JSON instead of resetting or overw
   assert.equal(restored.error, "LOCAL_ARCHIVE_INVALID");
   assert.equal(restoreStorage.getItem(forwardArchive.STORAGE_KEY), "{broken-json");
 });
+
+
+const riskModel = require("../api/risk-model.js");
+
+test("EUR risk budget scales safely across 160, 300 and 500 EUR balances at 2 percent", () => {
+  assert.equal(riskModel.getRiskBudgetEUR(160, 2), 3.2);
+  assert.equal(riskModel.getRiskBudgetEUR(300, 2), 6);
+  assert.equal(riskModel.getRiskBudgetEUR(500, 2), 10);
+  assert.throws(() => riskModel.getRiskBudgetEUR(160, 2.01), /RISK_PERCENT_OUT_OF_RANGE/);
+  assert.throws(() => riskModel.getRiskBudgetEUR(0, 2), /INVALID_ACCOUNT_BALANCE_EUR/);
+});
+
+test("EUR position sizing rounds volume down and keeps estimated risk under budget", () => {
+  const result = riskModel.calculatePositionSizeEUR({
+    balanceEUR: 300,
+    riskPercent: 2,
+    entryPrice: 3600,
+    stopPrice: 3590,
+    contractSize: 1,
+    usdToEur: 0.92,
+    minVolume: 0.1,
+    volumeStep: 0.01,
+    roundTripCostEURPerLot: 0.5
+  });
+  assert.equal(result.ok, true);
+  assert.ok(result.estimatedRiskEUR <= result.riskBudgetEUR);
+  assert.equal(result.volume, 0.64);
+});
+
+test("EUR position sizing blocks when broker specification or costs are missing", () => {
+  const result = riskModel.calculatePositionSizeEUR({
+    balanceEUR: 160,
+    entryPrice: 3600,
+    stopPrice: 3590,
+    minVolume: 0.1,
+    volumeStep: 0.01
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "BROKER_SPEC_OR_COST_DATA_UNVERIFIED");
+});
+
+test("EUR position sizing blocks when minimum volume exceeds the risk budget", () => {
+  const result = riskModel.calculatePositionSizeEUR({
+    balanceEUR: 160,
+    riskPercent: 2,
+    entryPrice: 3600,
+    stopPrice: 3500,
+    contractSize: 1,
+    usdToEur: 0.92,
+    minVolume: 0.1,
+    volumeStep: 0.01,
+    roundTripCostEURPerLot: 0.5
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "MINIMUM_VOLUME_EXCEEDS_RISK_BUDGET");
+});
