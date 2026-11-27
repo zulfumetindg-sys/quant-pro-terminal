@@ -40,7 +40,7 @@ blocks.push({ start: blockStart, end: candles.length - 1 });
 const periods = [];
 for (let n = 0; n < blocks.length; n++) {
   const block = blocks[n];
-  const scoreStart = block.start + 420;
+  const scoreStart = block.start + 600;
   if (block.end - scoreStart < 500) continue;
   periods.push({
     name: "SEGMENT_" + String(periods.length + 1).padStart(2, "0"),
@@ -143,7 +143,7 @@ const report = {
   },
   methodology: {
     splitAtGapsOver72Hours: true,
-    postGapWarmupBars: 420,
+    postGapWarmupBars: 600,
     minimumScoredBarsPerSegment: 500,
     fixedFullSpreadUSD: 0.30,
     slippagePerSideUSD: slippageScenarios,
