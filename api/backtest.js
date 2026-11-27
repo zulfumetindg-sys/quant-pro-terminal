@@ -460,7 +460,7 @@ function hasPeriodContinuity(candles, periodStart, periodEnd, periodComplete, no
   return true;
 }
 
-function runBacktest(candles, h4, indicators, slippage, period, now = Date.now()) {
+function runBacktest(candles, h4, indicators, slippage, period, now = Date.now(), options = {}) {
   const trades = [];
   const periodStart = Date.parse(period.start);
   const periodEnd = Date.parse(period.end);
@@ -577,7 +577,8 @@ function runBacktest(candles, h4, indicators, slippage, period, now = Date.now()
     volatilityDiagnostics: summarizeVolatilityDiagnostics([...trades, openTrade]),
     volatilityOutcomes: summarizeVolatilityOutcomes(trades),
     openTrade,
-    lastTrades: trades.slice(-10)
+    lastTrades: trades.slice(-10),
+    ...(options.includeTrades === true ? { closedTrades: trades } : {})
   };
 }
 
