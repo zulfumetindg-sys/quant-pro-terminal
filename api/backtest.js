@@ -814,7 +814,7 @@ module.exports = async function handler(req, res) {
       url.searchParams.set("order", "ASC");
 
       const response = await fetch(url, {
-        headers: { Authorization: \`apikey \${key}\` }
+        headers: { Authorization: "apikey " + key }
       });
       const body = await response.json();
 
@@ -842,7 +842,7 @@ module.exports = async function handler(req, res) {
         url.searchParams.set("end_date", window.endDate);
 
         const response = await fetch(url, {
-          headers: { Authorization: \`apikey \${key}\` }
+          headers: { Authorization: "apikey " + key }
         });
         const body = await response.json();
 
