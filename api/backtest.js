@@ -237,7 +237,7 @@ function getSignal(candles, h4, indicators, i, h4Index, options = {}) {
     const h4Closes = h4.slice(0, h4Index + 1).map(x => x.close);
     const h4Fast = ema(h4Closes, 8);
     const h4Slow = ema(h4Closes, 20);
-    const trendDiagnostics = {
+    trendDiagnostics = {
       h1EmaSpreadAtr: Number.isFinite(indicators.e20[i]) && Number.isFinite(indicators.e50[i])
         ? Number((Math.abs(indicators.e20[i] - indicators.e50[i]) / atr).toFixed(4))
         : null,
