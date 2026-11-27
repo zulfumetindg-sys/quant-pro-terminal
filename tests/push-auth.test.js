@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { generateKeyPairSync, sign } = require("node:crypto");
-const { verifyGithubOidcToken, EXPECTED } = require("../api/push-auth");
+const { verifyGithubOidcToken, EXPECTED } = require("../lib/push-auth");
 
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const jwk = { ...publicKey.export({ format: "jwk" }), kid: "unit-test-key", use: "sig", alg: "RS256" };

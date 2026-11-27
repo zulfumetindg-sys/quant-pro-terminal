@@ -1,5 +1,5 @@
 
-const { measureVolatilityShock } = require("./volatility");
+const { measureVolatilityShock } = require("../lib/volatility");
 
 const SYMBOL = "XAU/USD";
 const MARKET = "XAUUSD";

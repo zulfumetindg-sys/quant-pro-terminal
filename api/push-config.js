@@ -1,4 +1,4 @@
-const { backgroundPushConfigured } = require("./push-utils");
+const { backgroundPushConfigured } = require("../lib/push-utils");
 
 module.exports = async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");

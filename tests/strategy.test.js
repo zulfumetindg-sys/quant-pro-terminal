@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 
 const backtest = require("../api/backtest.js").__test;
 const live = require("../api/signal-engine.js").__test;
-const { measureVolatilityShock } = require("../api/volatility.js");
+const { measureVolatilityShock } = require("../lib/volatility.js");
 const journal = require("../api/manual-journal.js").__test;
 
 const fs = require("node:fs");
@@ -1632,7 +1632,7 @@ test("forward archive refuses malformed local JSON instead of resetting or overw
 });
 
 
-const riskModel = require("../api/risk-model.js");
+const riskModel = require("../lib/risk-model.js");
 
 test("EUR risk budget scales safely across 160, 300 and 500 EUR balances at 2 percent", () => {
   assert.equal(riskModel.getRiskBudgetEUR(160, 2), 3.2);

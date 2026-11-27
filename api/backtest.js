@@ -1,5 +1,5 @@
 
-const { measureVolatilityShock } = require("./volatility");
+const { measureVolatilityShock } = require("../lib/volatility");
 
 const SYMBOL = "XAU/USD";
 const STOP_ATR = 1.5;
