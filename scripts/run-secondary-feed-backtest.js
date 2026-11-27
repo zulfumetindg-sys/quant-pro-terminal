@@ -59,7 +59,7 @@ const slippageScenarios = [0.10, 0.20, 0.30, 0.50];
 
 function summarize(trades) {
   const ordered = [...trades].sort((a, b) => Date.parse(a.exitTime) - Date.parse(b.exitTime));
-  let equity = 0, peak = 0, maxDD = 0, peakTime = null;
+  let equity = 0, peak = 0, maxDD = 0, peakTime = ordered.length ? "START_OF_TEST" : null;
   let maxDDStart = null, maxDDEnd = null;
   let streak = 0, longest = 0, streakStart = null;
   let longestStreakStart = null, longestStreakEnd = null;
