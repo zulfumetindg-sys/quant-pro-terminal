@@ -1152,3 +1152,84 @@ test("historical period is not scored without its own 400 H1 and 100 H4 warmup",
   assert.notEqual(warmed.periodStatus, "PERIOD_WARMUP_INCOMPLETE");
   assert.equal(warmed.warmupComplete, undefined);
 });
+
+
+const forwardArchive = require("../public/forward-archive.js");
+
+function memoryStorage() {
+  const values = new Map();
+  return {
+    getItem(key) { return values.has(key) ? values.get(key) : null; },
+    setItem(key, value) { values.set(key, value); }
+  };
+}
+
+function forwardPayload(generatedAt, trades = []) {
+  return {
+    startTime: "2026-11-26T20:00:00.000Z",
+    generatedAt,
+    results: [
+      { slippagePerSideUSD: 0.1, closedTrades: trades },
+      { slippagePerSideUSD: 0.2, closedTrades: trades.map(t => ({ ...t, entry: t.entry + 0.1, stopLoss: t.stopLoss + 0.1, takeProfit: t.takeProfit + 0.1 })) }
+    ]
+  };
+}
+
+function sampleForwardTrade(signalTime, exitTime, netR = 1.9) {
+  return {
+    side: "BUY", signalTime, exitTime, entry: 100, stopLoss: 99,
+    takeProfit: 102, exit: 101.9, exitReason: "TAKE_PROFIT", netR
+  };
+}
+
+test("forward archive starts now and does not import trades from before tracking", () => {
+  const storage = memoryStorage();
+  const oldTrade = sampleForwardTrade("2026-11-27T05:00:00.000Z", "2026-11-27T10:00:00.000Z");
+  const first = forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z", [oldTrade]), storage);
+  assert.equal(first.ok, true);
+  assert.equal(first.started, true);
+  assert.equal(first.added, 0);
+  assert.equal(first.recordCount, 0);
+});
+
+test("forward archive stores only post-start closed signals and deduplicates repeated checks", () => {
+  const storage = memoryStorage();
+  forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), storage);
+  const fresh = sampleForwardTrade("2026-11-27T12:00:00.000Z", "2026-11-27T14:00:00.000Z");
+  const payload = forwardPayload("2026-11-27T15:00:00.000Z", [fresh]);
+  const first = forwardArchive.capture(payload, storage);
+  assert.equal(first.added, 2);
+  assert.equal(first.recordCount, 2);
+  const repeated = forwardArchive.capture(payload, storage);
+  assert.equal(repeated.added, 0);
+  assert.equal(repeated.recordCount, 2);
+});
+
+test("forward archive excludes signals before tracking even if they close afterward", () => {
+  const storage = memoryStorage();
+  forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), storage);
+  const oldSignal = sampleForwardTrade("2026-11-27T10:00:00.000Z", "2026-11-27T13:00:00.000Z");
+  const result = forwardArchive.capture(forwardPayload("2026-11-27T14:00:00.000Z", [oldSignal]), storage);
+  assert.equal(result.added, 0);
+  assert.equal(result.recordCount, 0);
+});
+
+test("forward archive retains first snapshot and flags provider replay changes", () => {
+  const storage = memoryStorage();
+  forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), storage);
+  const original = sampleForwardTrade("2026-11-27T12:00:00.000Z", "2026-11-27T14:00:00.000Z", 1.9);
+  forwardArchive.capture(forwardPayload("2026-11-27T15:00:00.000Z", [original]), storage);
+  const revised = { ...original, netR: 1.7 };
+  const result = forwardArchive.capture(forwardPayload("2026-11-27T16:00:00.000Z", [revised]), storage);
+  assert.equal(result.recordCount, 2);
+  assert.equal(result.conflictCount, 2);
+  const saved = JSON.parse(storage.getItem(forwardArchive.STORAGE_KEY));
+  assert.equal(saved.records[0].netR, 1.9);
+});
+
+test("forward archive refuses malformed API snapshots and invalid stored archives", () => {
+  const storage = memoryStorage();
+  assert.equal(forwardArchive.capture({}, storage).error, "INVALID_FORWARD_SNAPSHOT");
+  storage.setItem(forwardArchive.STORAGE_KEY, JSON.stringify({ schemaVersion: 9 }));
+  assert.equal(forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), storage).error, "LOCAL_ARCHIVE_INVALID");
+});
