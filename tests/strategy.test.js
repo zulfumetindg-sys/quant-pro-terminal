@@ -137,6 +137,24 @@ test("live signal entry and risk levels are based on the current provider quote 
   assert.equal(signal.executionStatus, "RESEARCH_ONLY_NOT_TRADE_READY");
 });
 
+test("live engine requires recent H1/H4 history continuity and a current completed H4 bar", () => {
+  const base = Date.UTC(2026, 0, 5, 0, 0, 0);
+  const data = Array.from({ length: 520 }, (_, i) =>
+    candle(base + i * 3600000, 2300 + i * 0.05 + 2 * Math.sin(i / 9), 1)
+  );
+  const h4 = live.aggregateH4(data);
+  assert.equal(live.checkRecentMarketDataContinuity(data, h4).continuous, true);
+
+  const gapData = data.filter((_, i) => i < 420 || i >= 500);
+  const gap = live.checkRecentMarketDataContinuity(gapData, live.aggregateH4(gapData));
+  assert.equal(gap.continuous, false);
+  assert.equal(gap.reason, "H1_GAP_OVER_72H");
+
+  const insufficient = live.checkRecentMarketDataContinuity(data.slice(-399), h4.slice(-99));
+  assert.equal(insufficient.continuous, false);
+  assert.equal(insufficient.reason, "H1_HISTORY_INSUFFICIENT");
+});
+
 test("live engine rejects missing, future and stale completed H1 candle data", () => {
   const now = Date.UTC(2026, 10, 26, 20, 30, 0);
   const fresh = [candle(now - 2 * 3600000, 2600)];
