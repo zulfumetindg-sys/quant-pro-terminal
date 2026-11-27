@@ -432,7 +432,7 @@ test("completed historical period may close a still-open trade at its final cand
   const h4 = backtest.makeH4(data);
   const indicators = backtest.buildIndicators(data);
   const period = { name: "COMPLETE_TEST", start: new Date(base + 400 * 3600000).toISOString(), end: new Date(base + 430 * 3600000).toISOString() };
-  const result = backtest.runBacktest(data, h4, indicators, 0.1, period);
+  const result = backtest.runBacktest(data, h4, indicators, 0.1, period, base + 431 * 3600000);
   assert.equal(result.periodComplete, true);
   assert.equal(result.periodStatus, "PERIOD_COMPLETE");
   assert.equal(result.openTrade, null);
