@@ -1325,3 +1325,23 @@ test("forward archive restore rejects corrupted local records without overwritin
   assert.equal(result.error, "LOCAL_ARCHIVE_INVALID");
   assert.deepEqual(forwardArchive.read(storage), malformed);
 });
+
+
+test("forward archive refuses malformed local JSON instead of resetting or overwriting it", () => {
+  const captureStorage = memoryStorage();
+  captureStorage.setItem(forwardArchive.STORAGE_KEY, "{broken-json");
+  const captureBefore = captureStorage.getItem(forwardArchive.STORAGE_KEY);
+  const captured = forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), captureStorage);
+  assert.equal(captured.ok, false);
+  assert.equal(captured.error, "LOCAL_ARCHIVE_INVALID");
+  assert.equal(captureStorage.getItem(forwardArchive.STORAGE_KEY), captureBefore);
+
+  const restoreStorage = memoryStorage();
+  restoreStorage.setItem(forwardArchive.STORAGE_KEY, "{broken-json");
+  const source = memoryStorage();
+  forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), source);
+  const restored = forwardArchive.restoreBackup(forwardArchive.exportBackup(source), restoreStorage);
+  assert.equal(restored.ok, false);
+  assert.equal(restored.error, "LOCAL_ARCHIVE_INVALID");
+  assert.equal(restoreStorage.getItem(forwardArchive.STORAGE_KEY), "{broken-json");
+});
