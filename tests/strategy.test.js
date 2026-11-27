@@ -865,3 +865,54 @@ test("manual journal rejects malformed Redis responses with a safe diagnostic co
     else process.env.KV_REST_API_TOKEN = saved.redis;
   }
 });
+
+
+test("manual journal rejects Redis payloads that omit the result field", async () => {
+  const handler = require("../api/manual-journal.js");
+  const originalFetch = global.fetch;
+  const originalError = console.error;
+  const saved = {
+    access: process.env.JOURNAL_ACCESS_TOKEN,
+    url: process.env.KV_REST_API_URL,
+    redis: process.env.KV_REST_API_TOKEN
+  };
+  const token = "journal-test-token-".padEnd(64, "x");
+  const logs = [];
+  const res = {
+    code: 200, body: null,
+    setHeader() {},
+    status(code) { this.code = code; return this; },
+    json(body) { this.body = body; return this; }
+  };
+
+  try {
+    process.env.JOURNAL_ACCESS_TOKEN = token;
+    process.env.KV_REST_API_URL = "https://redis.example.test";
+    process.env.KV_REST_API_TOKEN = "redis-secret";
+    console.error = (...args) => logs.push(args);
+    global.fetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ unexpected: "shape" })
+    });
+
+    await handler({
+      method: "GET",
+      headers: { authorization: "Bearer " + token }
+    }, res);
+
+    assert.equal(res.code, 502);
+    assert.equal(res.body.error, "JOURNAL_SERVICE_UNAVAILABLE");
+    assert.equal(res.body.diagnosticCode, "UPSTREAM_INVALID_RESPONSE");
+    assert.deepEqual(logs[0][1], { operation: "GET_STATE", httpStatus: 200 });
+  } finally {
+    global.fetch = originalFetch;
+    console.error = originalError;
+    if (saved.access === undefined) delete process.env.JOURNAL_ACCESS_TOKEN;
+    else process.env.JOURNAL_ACCESS_TOKEN = saved.access;
+    if (saved.url === undefined) delete process.env.KV_REST_API_URL;
+    else process.env.KV_REST_API_URL = saved.url;
+    if (saved.redis === undefined) delete process.env.KV_REST_API_TOKEN;
+    else process.env.KV_REST_API_TOKEN = saved.redis;
+  }
+});
