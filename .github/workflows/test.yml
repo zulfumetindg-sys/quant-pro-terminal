@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main, feature/signal-identity]
+    branches: [main]
 
 jobs:
   strategy-tests:
