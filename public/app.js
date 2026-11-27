@@ -283,7 +283,7 @@ async function loadForwardTest() {
         '<span>Yeni kaydedilen kapanmış kayıt: ' + esc(archive.added) + ' · Toplam kayıt: ' + esc(archive.recordCount) + '</span>' +
         archive.summaries.map(x => '<span>Kayma/yan ' + esc(x.slippagePerSideUSD) + ' · İşlem: ' + esc(x.tradeCount) +
           ' · Kazanç/kayıp: ' + esc(x.wins) + '/' + esc(x.losses) +
-          ' · Net: ' + esc(x.netR) + 'R · ' +
+          ' · PF: ' + esc(x.profitFactor) + ' · Net: ' + esc(x.netR) + 'R · DD: ' + esc(x.maxDrawdownR) + 'R · Ort: ' + esc(x.averageR) + 'R · ' +
           (x.winRatePercent == null ? 'Örneklem yetersiz' : 'Gözlenen WR: ' + esc(x.winRatePercent) + '%') +
           '</span>').join("") +
         '<span>Değişen eski kayıt: ' + esc(archive.conflictCount) + ' · İlk kayıt korunur</span>' +
