@@ -1,4 +1,4 @@
-const CACHE="quant-pro-v0-8-21";
+const CACHE="quant-pro-v0-8-22";
 const ASSETS=["./","./index.html","./styles.css","./app.js","./forward-archive.js","./signal-notification-policy.js","./manifest.webmanifest","./icon.svg"];
 self.addEventListener("install",event=>event.waitUntil((async()=>{
  const cache=await caches.open(CACHE);
@@ -41,5 +41,20 @@ self.addEventListener("notificationclick",event=>{
    if("focus" in client){await client.focus();if("navigate" in client)await client.navigate(target);return;}
   }
   if(self.clients.openWindow)await self.clients.openWindow(target);
+ })());
+});
+
+self.addEventListener("push",event=>{
+ event.waitUntil((async()=>{
+  let payload={};
+  try{payload=event.data?event.data.json():{};}catch(_){}
+  const title=typeof payload.title==="string"?payload.title:"QUANT PRO · XAUUSD";
+  const options={
+   body:typeof payload.body==="string"?payload.body:"Yeni piyasa bildirimi. Fiyatı uygulamada yeniden doğrula.",
+   tag:typeof payload.tag==="string"?payload.tag:"quant-pro-market-update",
+   renotify:false,
+   data:{url:"./"}
+  };
+  await self.registration.showNotification(title,options);
  })());
 });
