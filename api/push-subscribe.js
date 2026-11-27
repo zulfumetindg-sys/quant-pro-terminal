@@ -4,7 +4,7 @@ const {
   backgroundPushConfigured,
   validateSubscription,
   subscriptionKey
-} = require("./push-utils");
+} = require("../lib/push-utils");
 
 async function redis(command) {
   const response = await fetch(process.env.KV_REST_API_URL, {
