@@ -1,10 +1,4 @@
-const path = require("node:path");
-const { createRequire } = require("node:module");
-
-function createApiHandler(relativePath) {
-  const apiRequire = createRequire(path.join(process.cwd(), "netlify/functions/__adapter__.cjs"));
-  const handler = apiRequire(path.resolve(process.cwd(), relativePath));
-
+function adaptHandler(handler) {
   return async function netlifyHandler(event) {
     const url = new URL(event.rawUrl || event.path, "https://netlify.local");
     const query = Object.fromEntries(url.searchParams.entries());
@@ -43,4 +37,4 @@ function createApiHandler(relativePath) {
   };
 }
 
-module.exports = { createApiHandler };
+module.exports = { adaptHandler };
