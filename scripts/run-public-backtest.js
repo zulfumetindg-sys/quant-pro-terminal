@@ -5,12 +5,13 @@ const path = require("node:path");
 const engine = require("../api/backtest").__test;
 
 const file = process.argv[2] || "/tmp/XAUUSD_1h.csv";
-if (!fs.existsSync(file)) {
-  throw new Error("PUBLIC_XAUUSD_CSV_NOT_FOUND: " + file);
-}
+if (!fs.existsSync(file)) throw new Error("PUBLIC_XAUUSD_CSV_NOT_FOUND: " + file);
 
-const raw = fs.readFileSync(file, "utf8").replace(/^\\uFEFF/, "").trim();
-const lines = raw.split(/\\r?\\n/);
+let raw = fs.readFileSync(file, "utf8");
+if (raw.charCodeAt(0) === 65279) raw = raw.slice(1);
+const lines = raw.trim().split(String.fromCharCode(10)).map(line =>
+  line.endsWith(String.fromCharCode(13)) ? line.slice(0, -1) : line
+);
 if (lines.length < 501) throw new Error("PUBLIC_XAUUSD_SAMPLE_TOO_SMALL");
 
 const headers = lines[0].split(",").map(x => x.trim().toLowerCase());
@@ -76,7 +77,7 @@ const report = {
   results
 };
 
-process.stdout.write(JSON.stringify(report, null, 2) + "\\n");
+process.stdout.write(JSON.stringify(report, null, 2) + String.fromCharCode(10));
 
 const requiredComplete = results.filter(x =>
   ["MAYIS_HAZIRAN", "TEMMUZ_AGUSTOS"].includes(x.period)
