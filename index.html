@@ -63,6 +63,12 @@
       <div class="backtest-tools">
         <button class="connect-btn" id="forwardTestBtn">Sabit başlangıçlı ileri testi kontrol et</button>
         <div id="forwardTestResults" class="backtest-results">Sabit başlangıç tarihinden sonraki mumlar burada kontrol edilir. Bu işlem ek Twelve Data API kotası tüketir; yalnızca gerektiğinde çalıştır.</div>
+        <div class="journal-tools">
+          <button class="connect-btn" id="forwardArchiveExportBtn">İleri test yedeğini indir</button>
+          <label class="connect-btn" for="forwardArchiveImportFile">İleri test yedeğini geri yükle</label>
+          <input id="forwardArchiveImportFile" type="file" accept="application/json,.json" hidden>
+        </div>
+        <div id="forwardArchiveStatus" class="journal-status">İleri test arşivi manuel işlem günlüğünden ayrıdır.</div>
       </div>
     </section>
 
@@ -118,10 +124,10 @@
       <div id="journalHistory" class="journal-records"></div>
     </section>ion>
 
-    <footer><span>QUANT PRO · v0.8.15 · XAUUSD ONLY</span><span>Yalnızca analiz · Otomatik emir yok · Trade-ready değil</span></footer>
+    <footer><span>QUANT PRO · v0.8.16 · XAUUSD ONLY</span><span>Yalnızca analiz · Otomatik emir yok · Trade-ready değil</span></footer>
   </main>
 
-  <script src="forward-archive.js?v=0.8.15"></script>
-  <script src="app.js?v=0.8.15"></script>
+  <script src="forward-archive.js?v=0.8.16"></script>
+  <script src="app.js?v=0.8.16"></script>
 </body>
 </html>
