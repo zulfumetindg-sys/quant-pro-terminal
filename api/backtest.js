@@ -230,10 +230,27 @@ function getSignal(candles, h4, indicators, i, h4Index) {
 
   if (entryDistancePercent > MAX_ENTRY_DISTANCE_PERCENT) return null;
 
+  const h4Closes = h4.slice(0, h4Index + 1).map(x => x.close);
+  const h4Fast = ema(h4Closes, 8);
+  const h4Slow = ema(h4Closes, 20);
+  const trendDiagnostics = {
+    h1EmaSpreadAtr: Number.isFinite(indicators.e20[i]) && Number.isFinite(indicators.e50[i])
+      ? Number((Math.abs(indicators.e20[i] - indicators.e50[i]) / atr).toFixed(4))
+      : null,
+    h4EmaSpreadPercent: Number.isFinite(h4Fast) && Number.isFinite(h4Slow) && h4Closes[h4Closes.length - 1] > 0
+      ? Number((Math.abs(h4Fast - h4Slow) / h4Closes[h4Closes.length - 1] * 100).toFixed(4))
+      : null,
+    macdHistogramAtr: Number.isFinite(histogram)
+      ? Number((Math.abs(histogram) / atr).toFixed(4))
+      : null,
+    interpretation: "DESCRIPTIVE_SIGNAL_STRENGTH_NOT_A_TRADE_FILTER"
+  };
+
   return {
     side: h1Trend,
     atr,
     volatilityShock: measureVolatilityShock(candles, i),
+    trendDiagnostics,
     reference: candles[i].close,
     entryDistancePercent
   };
@@ -317,6 +334,7 @@ function calculateTrade(candles, i, signal, slippage, maxIndex, forceCloseAtEnd)
     return {
       side,
       volatilityShock: signal.volatilityShock || null,
+      trendDiagnostics: signal.trendDiagnostics || null,
       signalTime: new Date(candles[i].time + 3600000).toISOString(),
       entryReference: executionReference,
       entry,
@@ -339,6 +357,7 @@ function calculateTrade(candles, i, signal, slippage, maxIndex, forceCloseAtEnd)
     open: true,
     side,
     volatilityShock: signal.volatilityShock || null,
+    trendDiagnostics: signal.trendDiagnostics || null,
     signalTime: new Date(candles[i].time + 3600000).toISOString(),
     entryReference: executionReference,
     entry,
