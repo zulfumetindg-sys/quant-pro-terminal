@@ -3,7 +3,7 @@
   "symbol": "XAUUSD",
   "timeframe": "H1 + COMPLETED H4",
   "startTime": "2026-11-26T20:00:00.000Z",
-  "lastCheckedAt": "2026-11-27T15:51:21.192Z",
+  "lastCheckedAt": "2026-11-27T15:52:01.451Z",
   "lastError": null,
   "checks": [
     {
@@ -774,6 +774,50 @@
     },
     {
       "checkedAt": "2026-11-27T15:51:21.192Z",
+      "ok": true,
+      "forwardCandleCount": 19,
+      "warmupComplete": true,
+      "results": [
+        {
+          "slippagePerSideUSD": 0.1,
+          "status": "COLLECTING_MINIMUM_30_CLOSED_TRADES",
+          "closedTradeMetrics": {
+            "tradeCount": 2,
+            "winCount": 1,
+            "lossCount": 1,
+            "winRatePercent": 50,
+            "profitFactor": 1.987,
+            "netProfitR": 0.99,
+            "maxDrawdownR": 1,
+            "averageR": 0.496,
+            "grossWinR": 1.995,
+            "grossLossR": 1.004,
+            "insufficientSample": true
+          },
+          "openTrade": null
+        },
+        {
+          "slippagePerSideUSD": 0.2,
+          "status": "COLLECTING_MINIMUM_30_CLOSED_TRADES",
+          "closedTradeMetrics": {
+            "tradeCount": 2,
+            "winCount": 1,
+            "lossCount": 1,
+            "winRatePercent": 50,
+            "profitFactor": 1.973,
+            "netProfitR": 0.98,
+            "maxDrawdownR": 1.01,
+            "averageR": 0.491,
+            "grossWinR": 1.989,
+            "grossLossR": 1.008,
+            "insufficientSample": true
+          },
+          "openTrade": null
+        }
+      ]
+    },
+    {
+      "checkedAt": "2026-11-27T15:52:01.451Z",
       "ok": true,
       "forwardCandleCount": 19,
       "warmupComplete": true,
