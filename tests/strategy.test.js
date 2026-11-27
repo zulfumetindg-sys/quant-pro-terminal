@@ -919,16 +919,24 @@ test("manual journal rejects Redis payloads that omit the result field", async (
 
 
 test("manual journal marks malformed stored state as an invalid upstream response", () => {
-  assert.throws(
-    () => journal.parseRedisState("{broken"),
-    error => error.message === "JOURNAL_STATE_INVALID" &&
-      error.diagnosticCode === "UPSTREAM_INVALID_RESPONSE"
-  );
-  assert.throws(
-    () => journal.parseRedisState({ trades: {}, activeTradeId: "" }),
-    error => error.message === "JOURNAL_STATE_INVALID" &&
-      error.diagnosticCode === "UPSTREAM_INVALID_RESPONSE"
-  );
+  const invalid = error => error.message === "JOURNAL_STATE_INVALID" &&
+    error.diagnosticCode === "UPSTREAM_INVALID_RESPONSE";
+  assert.throws(() => journal.parseRedisState("{broken"), invalid);
+  assert.throws(() => journal.parseRedisState(""), invalid);
+  assert.throws(() => journal.parseRedisState({ trades: {}, activeTradeId: "" }), invalid);
+  assert.throws(() => journal.parseRedisState({
+    trades: [{
+      tradeId: "11111111-1111-4111-8111-111111111111",
+      signalId: "XAUUSD:BUY:1795730400000",
+      symbol: "XAUUSD", side: "BUY", status: "OPEN",
+      fillPrice: 2650, stopLoss: 2640, takeProfit: 2670
+    }],
+    activeTradeId: ""
+  }), invalid);
+  assert.throws(() => journal.parseRedisState({
+    trades: [], activeTradeId: "11111111-1111-4111-8111-111111111111"
+  }), invalid);
+  assert.deepEqual(journal.parseRedisState(null), { trades: [], activeTradeId: "" });
 });
 
 test("manual journal rejects malformed mutation payloads instead of returning false success", async () => {
