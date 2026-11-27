@@ -1111,7 +1111,8 @@ test("historical period is not scored without its own 400 H1 and 100 H4 warmup",
 
   const warmed = backtest.runBacktest(
     data, h4, indicators, 0.1,
-    { name: "WARMED", start: new Date(base + 500 * 3600000).toISOString(), end: new Date(base + 600 * 3600000).toISOString() }
+    { name: "WARMED", start: new Date(base + 500 * 3600000).toISOString(), end: new Date(base + 600 * 3600000).toISOString() },
+    base + 601 * 3600000
   );
   assert.notEqual(warmed.periodStatus, "PERIOD_WARMUP_INCOMPLETE");
   assert.equal(warmed.warmupComplete, undefined);
