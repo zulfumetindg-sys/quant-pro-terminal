@@ -1233,3 +1233,45 @@ test("forward archive refuses malformed API snapshots and invalid stored archive
   storage.setItem(forwardArchive.STORAGE_KEY, JSON.stringify({ schemaVersion: 9 }));
   assert.equal(forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), storage).error, "LOCAL_ARCHIVE_INVALID");
 });
+
+
+test("forward archive backup exports and restores records without duplication", () => {
+  const source = memoryStorage();
+  forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), source);
+  const trade = sampleForwardTrade("2026-11-27T12:00:00.000Z", "2026-11-27T14:00:00.000Z");
+  forwardArchive.capture(forwardPayload("2026-11-27T15:00:00.000Z", [trade]), source);
+  const backup = forwardArchive.exportBackup(source);
+  assert.ok(backup.includes("QUANT_PRO_FORWARD_ARCHIVE"));
+  const destination = memoryStorage();
+  const restored = forwardArchive.restoreBackup(backup, destination);
+  assert.equal(restored.ok, true);
+  assert.equal(restored.added, 2);
+  assert.equal(restored.recordCount, 2);
+  const repeated = forwardArchive.restoreBackup(backup, destination);
+  assert.equal(repeated.added, 0);
+  assert.equal(repeated.recordCount, 2);
+});
+
+test("forward archive backup rejects malformed files and preserves existing data", () => {
+  const storage = memoryStorage();
+  forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), storage);
+  const invalid = forwardArchive.restoreBackup('{"backupType":"WRONG"}', storage);
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.error, "INVALID_FORWARD_BACKUP");
+  assert.equal(forwardArchive.read(storage).records.length, 0);
+});
+
+test("forward archive backup merge preserves existing first-seen result on conflict", () => {
+  const a = memoryStorage(), b = memoryStorage();
+  forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), a);
+  forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), b);
+  const tradeA = sampleForwardTrade("2026-11-27T12:00:00.000Z", "2026-11-27T14:00:00.000Z", 1.9);
+  const tradeB = sampleForwardTrade("2026-11-27T12:00:00.000Z", "2026-11-27T14:00:00.000Z", 1.7);
+  forwardArchive.capture(forwardPayload("2026-11-27T15:00:00.000Z", [tradeA]), a);
+  forwardArchive.capture(forwardPayload("2026-11-27T15:00:00.000Z", [tradeB]), b);
+  const result = forwardArchive.restoreBackup(forwardArchive.exportBackup(b), a);
+  assert.equal(result.ok, true);
+  assert.equal(result.conflictCount, 1);
+  const saved = forwardArchive.read(a);
+  assert.equal(saved.records[0].netR, 1.9);
+});
