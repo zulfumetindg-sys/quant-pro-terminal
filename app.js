@@ -280,24 +280,37 @@ async function loadForwardTest() {
         ? '<span>Açık pozisyon: ' + esc(item.openTrade.side) + ' · ' +
           esc(item.openTrade.unrealizedR) + 'R (gerçekleşmiş sonuca dahil değil)</span>'
         : '<span>Açık pozisyon yok</span>';
+      const closedDetails = Array.isArray(item.lastClosedTrades) && item.lastClosedTrades.length
+        ? '<div class="forward-trade-details"><b>Son kapanan işlemler</b>' +
+          item.lastClosedTrades.map(trade => {
+            const signalAt = new Date(trade.signalTime);
+            const exitAt = new Date(trade.exitTime);
+            return '<div class="journal-row"><b>' + esc(trade.side) + ' · ' + esc(trade.netR) + 'R</b>' +
+              '<span>Sinyal: ' + (Number.isFinite(signalAt.getTime()) ? esc(signalAt.toLocaleString("tr-TR")) : "—") + '</span>' +
+              '<span>Giriş: ' + esc(trade.entry) + ' · SL: ' + esc(trade.stopLoss) + ' · TP: ' + esc(trade.takeProfit) + '</span>' +
+              '<span>Çıkış: ' + esc(trade.exit) + ' · ' + (Number.isFinite(exitAt.getTime()) ? esc(exitAt.toLocaleString("tr-TR")) : "—") + '</span>' +
+              '<span>Çıkış nedeni: ' + esc(trade.exitReason) + '</span></div>';
+          }).join("") + '</div>'
+        : '<span>Henüz kapanmış işlem detayı yok.</span>';
       return '<div class="backtest-row"><b>İleri test · Kayma/yan: ' + esc(item.slippagePerSideUSD) + '</b>' +
         '<span>Kapanan işlem: ' + esc(m.tradeCount) + '</span>' +
         '<span>WR: ' + (m.winRatePercent == null ? "—" : esc(m.winRatePercent) + "%") + '</span>' +
         '<span>PF: ' + esc(m.profitFactor) + '</span>' +
         '<span>Net: ' + esc(m.netProfitR) + 'R</span>' +
         '<span>DD: ' + esc(m.maxDrawdownR) + 'R</span>' + open +
-        '<span>' + (item.status === "FORWARD_SAMPLE_30_REACHED" ? "30 kapanmış işlem eşiği görüldü; doğrulama sürüyor" : "30 kapanmış işlem için veri toplanıyor") + '</span></div>';
+        '<span>İşlem bütünlüğü: ' + (item.integrity && item.integrity.valid ? 'DOĞRULANDI · ' + esc(item.integrity.uniqueSignalCount) + ' benzersiz sinyal' : 'DOĞRULANMADI') + '</span>' +
+        '<span>' + (item.status === "FORWARD_SAMPLE_30_REACHED" ? "30 kapanmış işlem eşiği görüldü; doğrulama sürüyor" : "30 kapanmış işlem için veri toplanıyor") + '</span>' + closedDetails + '</div>';
     });
     output.innerHTML =
       '<p>Motor: ' + esc(payload.engine) + ' · Sabit başlangıç: ' + esc(payload.startTime) +
       ' · İleri dönem H1 mum: ' + esc(payload.forwardCandleCount) + '</p>' +
       rows.join("") +
-      '<p class="risk-note">Bu, sabit başlangıç tarihinden sonraki veriler üzerinde yeniden hesaplanan ileri dönem simülasyonudur; sunucuda kalıcı işlem günlüğü tutulmaz. 30 işlem yalnızca asgari örneklem eşiğidir. Canlı kazanma olasılığı değildir ve sistem trade-ready değildir. Gerçek XM spread, komisyon ve kayma doğrulanmamıştır.</p>';
+      '<p class="risk-note">Bu, sabit başlangıç tarihinden sonraki veriler üzerinde yeniden hesaplanan ileri dönem simülasyonudur; sunucuda kalıcı işlem günlüğü tutulmaz. İşlem tarihleri ve benzersiz sinyal kimlikleri kontrol edilir. 30 işlem yalnızca asgari örneklem eşiğidir. Canlı kazanma olasılığı değildir ve sistem trade-ready değildir. Gerçek XM spread, komisyon ve kayma doğrulanmamıştır.</p>';
   } catch (error) {
     output.textContent = "İleri test alınamadı: " + error.message;
   } finally {
     button.disabled = false;
-    button.textContent = "Bağımsız ileri testi kontrol et";
+    button.textContent = "Sabit başlangıçlı ileri testi kontrol et";
   }
 }
 const JOURNAL_STORAGE_KEY = "quantProManualJournalV1";
