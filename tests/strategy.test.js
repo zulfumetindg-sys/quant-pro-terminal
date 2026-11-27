@@ -588,6 +588,35 @@ test("forward test excludes the pinned start candle and all earlier signal close
   assert.equal(backtest.isForwardSignalTime(Number.NaN), false);
 });
 
+test("forward warmup permits an 84-hour H4 timestamp gap when H1 history remains continuous", () => {
+  const base = Date.UTC(2026, 0, 5, 0, 0, 0);
+  const history = [];
+  for (let group = 0; group < 130; group++) {
+    for (let hour = 0; hour < 4; hour++) {
+      // Twenty incomplete H4 buckets emulate holiday/session boundary data.
+      if (group >= 40 && group < 60 && hour === 0) continue;
+      const index = group * 4 + hour;
+      history.push(candle(base + index * 3600000, 2300 + index * 0.01));
+    }
+  }
+  const forwardStart = base + 130 * 4 * 3600000;
+  assert.equal(backtest.hasForwardWarmup(history, forwardStart), true);
+});
+
+test("forward warmup still rejects an H4 gap above 96 hours", () => {
+  const base = Date.UTC(2026, 0, 5, 0, 0, 0);
+  const history = [];
+  for (let group = 0; group < 130; group++) {
+    for (let hour = 0; hour < 4; hour++) {
+      if (group >= 35 && group < 60 && hour === 0) continue;
+      const index = group * 4 + hour;
+      history.push(candle(base + index * 3600000, 2300 + index * 0.01));
+    }
+  }
+  const forwardStart = base + 130 * 4 * 3600000;
+  assert.equal(backtest.hasForwardWarmup(history, forwardStart), false);
+});
+
 test("forward test requires 400 H1 and 100 completed H4 warmup candles", () => {
   const base = Date.UTC(2026, 0, 5, 0, 0, 0);
   const start = base + 400 * 3600000;
