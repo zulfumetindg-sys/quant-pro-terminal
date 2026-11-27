@@ -366,6 +366,14 @@ test("stale and future last_quote_at values are rejected", async () => {
 });
 
 
+test("forward test excludes the pinned start candle and all earlier signal closes", () => {
+  const start = Date.UTC(2026, 10, 26, 20, 0, 0);
+  assert.equal(backtest.isForwardSignalTime(start - 1), false);
+  assert.equal(backtest.isForwardSignalTime(start), false);
+  assert.equal(backtest.isForwardSignalTime(start + 1), true);
+  assert.equal(backtest.isForwardSignalTime(Number.NaN), false);
+});
+
 test("forward test requires 400 H1 and 100 completed H4 warmup candles", () => {
   const base = Date.UTC(2026, 0, 5, 0, 0, 0);
   const start = base + 400 * 3600000;
