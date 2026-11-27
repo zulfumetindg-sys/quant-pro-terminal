@@ -601,11 +601,17 @@ function hasForwardWarmup(candles, forwardStart) {
   const h4Warmup = makeH4(history).slice(-100);
   if (h4Warmup.length < 100) return false;
 
+  // H4 bars are assembled only from four complete UTC H1 buckets. Around
+  // long market holidays, incomplete boundary buckets can widen the H4
+  // timestamp gap even when the underlying H1 sequence remains continuous.
+  // H1 continuity remains capped at 72h; allow up to 96h between completed
+  // H4 bars so a normal holiday does not invalidate an otherwise sound warmup.
+  const maxH4GapMs = 96 * 3600000;
   if (h4Warmup[h4Warmup.length - 1].end <
       forwardStart - maxGapMs) return false;
 
   for (let i = 1; i < h4Warmup.length; i++) {
-    if (h4Warmup[i].time - h4Warmup[i - 1].time > maxGapMs) return false;
+    if (h4Warmup[i].time - h4Warmup[i - 1].time > maxH4GapMs) return false;
   }
 
   return true;
