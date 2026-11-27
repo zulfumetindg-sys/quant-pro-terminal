@@ -992,3 +992,54 @@ test("manual journal rejects malformed mutation payloads instead of returning fa
     else process.env.KV_REST_API_TOKEN = saved.redis;
   }
 });
+
+
+test("manual journal rejects incomplete negative mutation results", async () => {
+  const handler = require("../api/manual-journal.js");
+  const originalFetch = global.fetch;
+  const saved = {
+    access: process.env.JOURNAL_ACCESS_TOKEN,
+    url: process.env.KV_REST_API_URL,
+    redis: process.env.KV_REST_API_TOKEN
+  };
+  const token = "journal-test-token-".padEnd(64, "x");
+  const res = {
+    code: 200, body: null,
+    setHeader() {},
+    status(code) { this.code = code; return this; },
+    json(body) { this.body = body; return this; }
+  };
+  try {
+    process.env.JOURNAL_ACCESS_TOKEN = token;
+    process.env.KV_REST_API_URL = "https://redis.example.test";
+    process.env.KV_REST_API_TOKEN = "redis-secret";
+    global.fetch = async () => ({
+      ok: true, status: 200,
+      json: async () => ({ result: JSON.stringify({ ok: false }) })
+    });
+    const closedAt = Date.now() - 30 * 60000;
+    const signal = {
+      symbol: "XAUUSD", status: "BUY",
+      signalId: "XAUUSD:BUY:" + closedAt,
+      signalCandleClosedAt: new Date(closedAt).toISOString(),
+      signalValidUntil: new Date(closedAt + 3600000).toISOString(),
+      entry: 2650, sl: 2640, tp: 2670
+    };
+    await handler({
+      method: "POST",
+      headers: { authorization: "Bearer " + token },
+      body: { action: "open", signal, fillPrice: 2650 }
+    }, res);
+    assert.equal(res.code, 502);
+    assert.equal(res.body.error, "JOURNAL_SERVICE_UNAVAILABLE");
+    assert.equal(res.body.diagnosticCode, "UPSTREAM_INVALID_RESPONSE");
+  } finally {
+    global.fetch = originalFetch;
+    if (saved.access === undefined) delete process.env.JOURNAL_ACCESS_TOKEN;
+    else process.env.JOURNAL_ACCESS_TOKEN = saved.access;
+    if (saved.url === undefined) delete process.env.KV_REST_API_URL;
+    else process.env.KV_REST_API_URL = saved.url;
+    if (saved.redis === undefined) delete process.env.KV_REST_API_TOKEN;
+    else process.env.KV_REST_API_TOKEN = saved.redis;
+  }
+});
