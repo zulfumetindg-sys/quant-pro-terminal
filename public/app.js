@@ -164,10 +164,8 @@ async function notifyNewSignal(signal) {
       !("serviceWorker" in navigator) || !window.QuantSignalNotifications) return;
   try {
     const registration = await navigator.serviceWorker.ready;
-    if (registration.pushManager && await registration.pushManager.getSubscription()) {
-      backgroundPushEnabled = true;
-      return;
-    }
+    // Do not infer server-side delivery from a local browser subscription alone.
+    // If background configuration is unavailable, retain foreground alerts.
     const previousId = localStorage.getItem(SIGNAL_NOTIFICATION_KEY);
     const decision = window.QuantSignalNotifications.evaluate(signal, previousId, Date.now());
     if (!decision.notify) {
