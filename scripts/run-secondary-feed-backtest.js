@@ -195,6 +195,23 @@ function summarize(trades) {
       SELL: group(matched.filter(t => t.side === "SELL"))
     }];
   }));
+  const byEntryYearAndVolatilityRegime = {};
+  for (const trade of ordered) {
+    const ratio = trade?.volatilityShock?.ratio;
+    if (!Number.isFinite(ratio)) continue;
+    const bucket = volatilityBuckets.find(x => ratio >= x.min && ratio < x.max);
+    if (!bucket) continue;
+    const year = new Date(trade.signalTime).getUTCFullYear();
+    const key = `${year}_${bucket.label}`;
+    (byEntryYearAndVolatilityRegime[key] ||= []).push(trade);
+  }
+  const byEntryYearAndVolatilityRegimeSummary = Object.fromEntries(
+    Object.entries(byEntryYearAndVolatilityRegime).map(([key, list]) => [key, {
+      ...group(list),
+      BUY: group(list.filter(t => t.side === "BUY")),
+      SELL: group(list.filter(t => t.side === "SELL"))
+    }])
+  );
   return {
     overall: group(ordered),
     historicalBlockBootstrap: blockBootstrap(ordered.map(t => t.netR)),
@@ -220,7 +237,8 @@ function summarize(trades) {
     byEntryHourUTC: summarizeMap(byEntryHourUTC),
     byEntryHourUTCAndSide: summarizeMap(byEntryHourUTCAndSide),
     byVolatilityRegime,
-    volatilityRegimeInterpretation: "EXPLORATORY_DESCRIPTIVE_BINS_NOT_VALIDATED_FILTERS"
+    byEntryYearAndVolatilityRegime: byEntryYearAndVolatilityRegimeSummary,
+    volatilityRegimeInterpretation: "EXPLORATORY_DESCRIPTIVE_BINS_NOT_VALIDATED_FILTERS";
   };
 }
 
