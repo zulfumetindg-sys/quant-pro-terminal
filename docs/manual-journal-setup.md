@@ -1,37 +1,22 @@
-# QUANT PRO manual journal setup
+# QUANT PRO manual journal: current behavior
 
-The manual journal is an authenticated, server-side XAUUSD trade ledger. It does not send orders and it does not read MT5 automatically. The user enters the actual MT5 fill and exit prices.
+## What the app currently uses
 
-## Required services and environment variables
+The **Manuel işlem kaydı** panel in the web app stores trades in that browser's localStorage.
 
-Create a small Redis database with Upstash Redis and copy its REST URL and REST token. For the pull-request Preview deployment, add these variables to the Vercel **Preview** environment. Add them to **Production** only when the feature is deliberately released to the production domain:
+- No Upstash, Redis, database, access token, or environment variable is needed for this panel.
+- Records do not automatically synchronize between phones, browsers, or devices.
+- Clearing the browser's site data can delete the records. Export a JSON backup regularly and keep it somewhere safe.
+- The panel is manual only: it does not read MT5, verify broker fills, or send/modify/close orders.
+- The entered fill, stop, target, and exit prices are user-entered. Spread, commission, swap, partial fills, and broker statements are not imported; realized R is therefore a gross calculation from the entered prices.
+- The local panel checks the entered price geometry and a minimum gross R:R of 1:1.8. This does not prove the trade was based on a valid QUANT PRO signal.
 
-- `KV_REST_API_URL`: Upstash Redis REST URL.
-- `KV_REST_API_TOKEN`: Upstash Redis REST token. Server-side only.
-- `JOURNAL_ACCESS_TOKEN`: a separate high-entropy access token, at least 32 bytes.
+## Separate optional API endpoint
 
-Generate the journal access token locally, for example:
+The repository also contains api/manual-journal.js, an authenticated Redis-backed API prototype. **The current web interface does not call this endpoint.** It is not required to use the local manual journal and should not be configured as part of the current setup.
 
-```sh
-openssl rand -hex 32
-```
+If this endpoint is deliberately integrated in a future release, it requires a separate Upstash Redis REST URL, REST token, and a high-entropy JOURNAL_ACCESS_TOKEN (at least 32 bytes), configured as server-side environment variables. Do not put those values in frontend code or commit them. The endpoint remains manual-only and is not connected to XM/MT5.
 
-Do not commit these values, put them in frontend JavaScript, or share screenshots containing them. Redeploy after adding the environment variables. The API deliberately returns `JOURNAL_STORAGE_NOT_CONFIGURED` until the Redis variables exist.
+## Forward-test archive is separate
 
-## Using the journal
-
-1. Open the feature-branch Preview URL over HTTPS.
-2. In **Manuel işlem kaydı**, enter the secret VALUE stored in Vercel as `JOURNAL_ACCESS_TOKEN` (not the variable name) and connect.
-3. When a current XAUUSD BUY/SELL signal exists, enter the actual MT5 fill price and save the opening.
-4. When the position is manually closed in MT5, enter the actual exit price and save the closing.
-5. Reconnect with the same access token to load the same server-side ledger from another device.
-
-## Safeguards and limitations
-
-- The API accepts XAUUSD only, requires a current unexpired BUY/SELL signal, and rejects WAIT or expired signals.
-- Actual fill-to-SL / TP geometry is checked. If the actual fill leaves less than 1:1.8 gross reward-to-risk, the opening is rejected.
-- A Redis Lua script makes opening/closing atomic, permits only one active journal position, prevents reusing a signal ID, and requires the exact active trade ID for a close.
-- The access token is kept in the browser tab's session storage, not embedded in the app bundle. Use a private device and clear the session when finished.
-- The journal stores up to 500 recent trades. The Redis database and access token are separate from the Twelve Data API key.
-- Realized R uses the actual entered fill and exit prices and the original stop distance. Spread, commission, swap, partial fills, and MT5 statements are not imported; the result is therefore gross/manual-entry data, not broker-verified net P&L.
-- The API is not trade-ready, is not connected to XM/MT5, and cannot open, modify, or close orders.
+The forward-test archive also uses this device's browser storage, under a different key from the manual journal. It has its own JSON export/import controls. Back up both datasets separately.
