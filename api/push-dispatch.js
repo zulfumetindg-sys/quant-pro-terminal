@@ -1,7 +1,7 @@
 const webpush = require("web-push");
-const { backgroundPushConfigured, encodePushBody } = require("./push-utils");
+const { backgroundPushConfigured, encodePushBody } = require("../lib/push-utils");
 const { validateSignalIdentity } = require("../public/signal-notification-policy");
-const { verifyGithubOidcRequest } = require("./push-auth");
+const { verifyGithubOidcRequest } = require("../lib/push-auth");
 
 async function readSignalEnginePayload(signalEngineHandler = require("./signal-engine")) {
   let statusCode = 200;
