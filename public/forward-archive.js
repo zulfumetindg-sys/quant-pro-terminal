@@ -102,7 +102,7 @@
         const existing = archive.records.find(x => x.key === key);
         if (existing) {
           if (!sameTrade(existing, candidate) &&
-              !archive.conflicts.some(x => x.key === key && x.observedAt === observedAt)) {
+              !archive.conflicts.some(x => x.key === key)) {
             archive.conflicts.push({
               key,
               firstObservedAt: existing.firstObservedAt,
