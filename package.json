@@ -1,6 +1,6 @@
 {
   "name": "quant-pro-terminal",
-  "version": "0.8.9",
+  "version": "0.8.10",
   "private": true,
   "description": "XAUUSD research-only signal terminal",
   "engines": {
