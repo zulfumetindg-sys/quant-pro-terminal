@@ -6,6 +6,26 @@ const live = require("../api/signal-engine.js").__test;
 const { measureVolatilityShock } = require("../api/volatility.js");
 const journal = require("../api/manual-journal.js").__test;
 
+const fs = require("node:fs");
+const path = require("node:path");
+
+test("root and public app bundles stay byte-identical", () => {
+  const root = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
+  const published = fs.readFileSync(path.join(__dirname, "..", "public", "app.js"), "utf8");
+  assert.equal(root, published);
+});
+
+test("live H4 aggregation uses complete UTC four-hour buckets", () => {
+  const base = Date.UTC(2026, 10, 27, 0, 0, 0);
+  const h1 = Array.from({ length: 8 }, (_, i) => candle(base + i * 3600000, 2600 + i));
+  const h4 = live.aggregateH4(h1);
+  assert.deepEqual(h4.map(x => x.time), [base, base + 4 * 3600000]);
+  assert.deepEqual(h4.map(x => x.datetime), [
+    "2026-11-27T00:00:00.000Z",
+    "2026-11-27T04:00:00.000Z"
+  ]);
+});
+
 function candle(time, price, range = 1) {
   return {
     time,
