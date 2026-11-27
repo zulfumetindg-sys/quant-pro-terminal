@@ -437,6 +437,31 @@ $("journalStatus").textContent = "Veritabanı gerekmiyor · kayıtlar bu cihazı
 
 $("refreshBtn").addEventListener("click", () => loadSignal());
 $("backtestBtn").addEventListener("click", loadBacktest);
+function exportForwardArchive() {
+  const data = window.QuantForwardArchive && window.QuantForwardArchive.exportBackup(window.localStorage);
+  if (!data) { $("forwardArchiveStatus").textContent = "Henüz ileri test arşivi yok."; return; }
+  const blob = new Blob([data], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = "quant-pro-ileri-test-yedegi.json"; a.click();
+  URL.revokeObjectURL(url);
+  $("forwardArchiveStatus").textContent = "İleri test arşivi yedeği indirildi.";
+}
+function importForwardArchive(event) {
+  const file = event.target.files && event.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const result = window.QuantForwardArchive
+      ? window.QuantForwardArchive.restoreBackup(String(reader.result), window.localStorage)
+      : { ok: false, error: "ARCHIVE_HELPER_UNAVAILABLE" };
+    $("forwardArchiveStatus").textContent = result.ok
+      ? "Yedek birleştirildi · yeni kayıt: " + result.added + " · toplam: " + result.recordCount + " · çakışma: " + result.conflictCount
+      : "Yedek yüklenemedi: " + result.error + " · mevcut arşiv korundu.";
+    event.target.value = "";
+  };
+  reader.readAsText(file);
+}
+$("forwardArchiveExportBtn").addEventListener("click", exportForwardArchive);
+$("forwardArchiveImportFile").addEventListener("change", importForwardArchive);
 $("forwardTestBtn").addEventListener("click", loadForwardTest);
 $("aiAnalyzeBtn").addEventListener("click", loadFreeAnalysis);
 let installPrompt;
