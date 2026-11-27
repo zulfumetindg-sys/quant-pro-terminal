@@ -1,5 +1,5 @@
-const CACHE="quant-pro-v0-8-20";
-const ASSETS=["./","./index.html","./styles.css","./app.js","./forward-archive.js","./manifest.webmanifest","./icon.svg"];
+const CACHE="quant-pro-v0-8-21";
+const ASSETS=["./","./index.html","./styles.css","./app.js","./forward-archive.js","./signal-notification-policy.js","./manifest.webmanifest","./icon.svg"];
 self.addEventListener("install",event=>event.waitUntil((async()=>{
  const cache=await caches.open(CACHE);
  await cache.addAll(ASSETS);
@@ -29,5 +29,17 @@ self.addEventListener("fetch",event=>{
   const response=await fetch(request);
   if(response.ok){const cache=await caches.open(CACHE);cache.put(request,response.clone());}
   return response;
+ })());
+});
+
+self.addEventListener("notificationclick",event=>{
+ event.notification.close();
+ event.waitUntil((async()=>{
+  const target=new URL(event.notification.data&&event.notification.data.url||"./",self.location.href).href;
+  const windows=await self.clients.matchAll({type:"window",includeUncontrolled:true});
+  for(const client of windows){
+   if("focus" in client){await client.focus();if("navigate" in client)await client.navigate(target);return;}
+  }
+  if(self.clients.openWindow)await self.clients.openWindow(target);
  })());
 });
