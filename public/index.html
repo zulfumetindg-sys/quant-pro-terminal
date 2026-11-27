@@ -7,7 +7,7 @@
   <meta name="description" content="QUANT PRO yalnızca XAUUSD altın analiz ve sinyal terminali">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.8.4">
+  <link rel="stylesheet" href="styles.css?v=0.8.6">
   <title>QUANT PRO · XAUUSD</title>
 </head>
 <body>
@@ -79,39 +79,44 @@
     <section class="journal-panel" id="manual-journal">
       <div class="section-head compact">
         <div><div class="eyebrow">MANUAL TRADE JOURNAL</div><h2>Manuel işlem kaydı</h2></div>
-        <span class="pill blue">XAUUSD · KALICI KAYIT</span>
+        <span class="pill blue">XAUUSD · CİHAZDA KAYIT</span>
       </div>
-      <p class="risk-note">Yalnızca senin MT5'te gerçekten açıp kapattığın işlemleri kaydeder. Emir göndermez. Gerçek gerçekleşme fiyatını gir. Spread, komisyon ve swap girilmediği sürece net sonuç değildir.</p>
-      <div class="journal-auth">
-        <label for="journalToken">Güvenli kayıt anahtarı</label>
-        <input id="journalToken" type="password" autocomplete="off" placeholder="Vercel'deki JOURNAL_ACCESS_TOKEN değerini gir">
-        <small class="journal-hint">Değişken adını değil, Vercel ortam değişkeninin gizli değerini gir. Bu anahtarı kimseyle paylaşma.</small>
-        <button class="connect-btn" id="journalConnectBtn">Bağlan ve kayıtları yükle</button>
-      </div>
-      <div id="journalStatus" class="journal-status">Kayıt veritabanı bağlantısı bekleniyor.</div>
+      <p class="risk-note">Yalnızca MT5'te gerçekten açıp kapattığın işlemleri elle kaydeder. Emir göndermez. Kayıtlar bu cihazın tarayıcısında saklanır; cihaz değiştirirken yedek alıp geri yükle. Spread, komisyon ve swap dahil değildir.</p>
       <div class="journal-grid">
         <div class="journal-card">
           <h3>Manuel açılış</h3>
+          <label for="journalSide">İşlem yönü</label>
+          <select id="journalSide"><option value="BUY">AL (BUY)</option><option value="SELL">SAT (SELL)</option></select>
           <label for="journalFillPrice">MT5 gerçekleşen giriş fiyatı</label>
           <input id="journalFillPrice" inputmode="decimal" type="number" min="0" step="0.01" placeholder="Örn. 2650.50">
-          <button class="connect-btn" id="journalOpenBtn" disabled>Mevcut AL/SAT sinyalini kaydet</button>
-          <p>Yalnızca geçerli, süresi dolmamış XAUUSD sinyali kabul edilir. Gerçek giriş fiyatındaki R:R en az 1:1,8 olmalıdır.</p>
+          <label for="journalStopLoss">Başlangıç stop loss</label>
+          <input id="journalStopLoss" inputmode="decimal" type="number" min="0" step="0.01" placeholder="Örn. 2640.50">
+          <label for="journalTakeProfit">Take profit</label>
+          <input id="journalTakeProfit" inputmode="decimal" type="number" min="0" step="0.01" placeholder="Örn. 2670.50">
+          <button class="connect-btn" id="journalOpenBtn">Açılışı kaydet</button>
+          <p>Tek seferde bir açık işlem tutulur. Kayıt için brüt R:R en az 1:1,8 olmalıdır.</p>
         </div>
         <div class="journal-card">
           <h3>Manuel kapanış</h3>
           <label for="journalExitPrice">MT5 gerçekleşen çıkış fiyatı</label>
           <input id="journalExitPrice" inputmode="decimal" type="number" min="0" step="0.01" placeholder="Örn. 2670.50">
           <button class="connect-btn" id="journalCloseBtn" disabled>Açık işlemi kapat ve kaydet</button>
-          <p>Gerçekleşen R, gerçek giriş fiyatı ile başlangıç stop mesafesine göre hesaplanır.</p>
+          <p>Sonuç R olarak hesaplanır; işlem maliyetleri dahil değildir.</p>
         </div>
       </div>
-      <div id="journalActive" class="journal-records">Henüz açık işlem bilgisi yok.</div>
+      <div class="journal-tools">
+        <button class="connect-btn" id="journalExportBtn">Yedeği indir</button>
+        <label class="connect-btn" for="journalImportFile">Yedekten geri yükle</label>
+        <input id="journalImportFile" type="file" accept="application/json,.json" hidden>
+      </div>
+      <div id="journalStatus" class="journal-status">Veritabanı gerekmiyor.</div>
+      <div id="journalActive" class="journal-records">Henüz açık işlem yok.</div>
       <div id="journalHistory" class="journal-records"></div>
-    </section>
+    </section>ion>
 
-    <footer><span>QUANT PRO · v0.8.5 · XAUUSD ONLY</span><span>Yalnızca analiz · Otomatik emir yok · Trade-ready değil</span></footer>
+    <footer><span>QUANT PRO · v0.8.6 · XAUUSD ONLY</span><span>Yalnızca analiz · Otomatik emir yok · Trade-ready değil</span></footer>
   </main>
 
-  <script src="app.js?v=0.8.5"></script>
+  <script src="app.js?v=0.8.6"></script>
 </body>
 </html>
