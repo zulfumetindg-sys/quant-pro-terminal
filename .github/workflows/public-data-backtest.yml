@@ -1,0 +1,24 @@
+name: QUANT PRO public-data historical validation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  public-data-backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Download public XAUUSD sample
+        run: |
+          curl --fail --location --silent --show-error \
+            https://raw.githubusercontent.com/getdata-finance/xauusd-1h-ohlcv-metals-historical-data/main/XAUUSD_1h.csv \
+            --output /tmp/XAUUSD_1h.csv
+      - name: Run QUANT PRO exact backtest engine
+        run: node scripts/run-public-backtest.js /tmp/XAUUSD_1h.csv
