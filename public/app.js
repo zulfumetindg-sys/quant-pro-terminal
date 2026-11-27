@@ -21,7 +21,7 @@ function updateStats(signal, dataOnline) {
   $("activeCount").textContent = active ? "1" : "0";
   $("activeDetail").textContent = active ? "Altın için sinyal var" : "Şu an AL / SAT sinyali yok";
   $("dataStatus").textContent = dataOnline ? "DOĞRULANDI" : "DOĞRULANMADI";
-  $("dataDetail").textContent = dataOnline ? "Fiyat zaman damgası geçerli" : "Fiyatın güncelliği doğrulanamadı";
+  $("dataDetail").textContent = dataOnline ? "Son 1 dakikalık veri zaman damgası kontrol edildi" : "Fiyat verisinin güncelliği doğrulanamadı";
 }
 
 function renderSignal(signal) {
@@ -118,7 +118,7 @@ async function loadSignal(force = false) {
       " · " + (payload.completedH4Count ?? "—") + " tamamlanmış H4 mum";
 
     if (online) {
-      setNotice("Fiyat zaman damgası doğrulandı", "XAUUSD fiyatı " + (payload.quote.ageSeconds ?? "—") + " saniye önce güncellendi. Bid/ask ve gerçek işlem maliyeti ayrıca doğrulanmış değildir.", "ok");
+      setNotice("Son 1 dakikalık veri zaman damgası kontrol edildi", "Twelve Data son 1 dakikalık fiyat mumunun zaman damgası " + (payload.quote.ageSeconds ?? "—") + " saniye önce. Bu gerçek tick zamanı değildir; bid/ask ve işlem maliyetleri doğrulanmamıştır.", "ok");
     } else {
       setNotice("Fiyat güncelliği doğrulanamadı", "Zaman damgası eksik veya 180 saniyeden eski. Güvenlik gereği AL/SAT sinyali üretilmedi.", "bad");
     }
