@@ -56,6 +56,9 @@ function renderSignal(signal) {
 
   html += '<p class="signal-muted">' + esc(signal.reason || signal.entryModelWarning || "Sinyal koşulları kontrol edildi.") + '</p>' +
     '<p class="risk-note">RESEARCH_ONLY_NOT_TRADE_READY · Bu sistem emir göndermez. Bağımsız ileri test tamamlanmadığı için kazanma olasılığı üretilmez.</p>';
+  html += '<p class="risk-note">H4 mumları UTC 00:00 / 04:00 / 08:00 / 12:00 / 16:00 / 20:00 sınırlarında oluşturulur. XM MT5 sunucu saatiyle H4 hizalaması doğrulanmadı; XM grafiğiyle aynı H4 trendi varsayma.</p>' +
+    '<p class="risk-note">Geri testte giriş mesafesi sonraki H1 açılışıyla yaklaşık modellenir; canlı panelde son 1 dakikalık mum kapanışı kullanılır. Bu nedenle canlı ve tarihsel giriş koşulları birebir aynı değildir.</p>';
+
 
   if (signal.signalId && signal.signalValidUntil) {
     const validUntil = new Date(signal.signalValidUntil);
