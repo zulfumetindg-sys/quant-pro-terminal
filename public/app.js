@@ -90,11 +90,18 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
 
 
 const SIGNAL_NOTIFICATION_KEY = "quantProLastNotifiedSignalV1";
+let backgroundPushEnabled = false;
 function setSignalNotificationStatus(message, bad = false) {
   const status = $("signalNotificationStatus");
   if (!status) return;
   status.textContent = message;
   status.className = "journal-status" + (bad ? " bad" : " ok");
+}
+function decodeVapidKey(value) {
+  const padding = "=".repeat((4 - value.length % 4) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from(raw, char => char.charCodeAt(0));
 }
 async function enableSignalNotifications() {
   if (!("Notification" in window)) {
@@ -113,27 +120,60 @@ async function enableSignalNotifications() {
         : "Bildirim izni verilmedi.", true);
       return;
     }
-    await navigator.serviceWorker.ready;
+    const registration = await navigator.serviceWorker.ready;
     if (latestSignal && (latestSignal.status === "BUY" || latestSignal.status === "SELL") && latestSignal.signalId) {
       localStorage.setItem(SIGNAL_NOTIFICATION_KEY, latestSignal.signalId);
     }
+
+    let config = null;
+    try {
+      const response = await fetchWithTimeout("/api/push-config", { cache: "no-store" }, 10000);
+      config = await response.json();
+    } catch (_) {}
+
+    if (config && config.ok && config.enabled && config.publicKey && registration.pushManager) {
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: decodeVapidKey(config.publicKey)
+        });
+      }
+      const saved = await fetchWithTimeout("/api/push-subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subscription)
+      }, 15000);
+      const result = await saved.json();
+      if (!saved.ok || !result.ok) throw new Error(result.error || "PUSH_SUBSCRIPTION_SAVE_FAILED");
+      backgroundPushEnabled = true;
+      $("signalNotificationBtn").textContent = "Arka plan bildirimleri açık";
+      setSignalNotificationStatus("Arka plan bildirimi etkin. Yeni ve doğrulanmış XAUUSD AL/SAT sinyali, uygulama kapalıyken de gönderilebilir. Bildirim geldiğinde fiyatı yeniden doğrula.");
+      return;
+    }
+
+    backgroundPushEnabled = false;
     $("signalNotificationBtn").textContent = "Bildirimler açık";
-    setSignalNotificationStatus("Bildirim izni açık. Mevcut sinyal başlangıç noktası olarak kaydedildi; bundan sonra yeni ve geçerli AL/SAT sinyali geldiğinde bildirim gösterilecek.");
+    setSignalNotificationStatus("Tarayıcı bildirimi açık. Arka plan Web Push sunucu ayarları henüz tamamlanmadığı için bildirim yalnızca uygulama açıkken ve veriyi yenilediğinde çalışır.");
   } catch (error) {
     setSignalNotificationStatus("Bildirim kurulamadı: " + error.message, true);
   }
 }
 async function notifyNewSignal(signal) {
-  if (!signal || !("Notification" in window) || Notification.permission !== "granted" ||
+  if (!signal || backgroundPushEnabled || !("Notification" in window) || Notification.permission !== "granted" ||
       !("serviceWorker" in navigator) || !window.QuantSignalNotifications) return;
   try {
+    const registration = await navigator.serviceWorker.ready;
+    if (registration.pushManager && await registration.pushManager.getSubscription()) {
+      backgroundPushEnabled = true;
+      return;
+    }
     const previousId = localStorage.getItem(SIGNAL_NOTIFICATION_KEY);
     const decision = window.QuantSignalNotifications.evaluate(signal, previousId, Date.now());
     if (!decision.notify) {
       if (decision.nextId) localStorage.setItem(SIGNAL_NOTIFICATION_KEY, decision.nextId);
       return;
     }
-    const registration = await navigator.serviceWorker.ready;
     const sideLabel = signal.status === "BUY" ? "AL" : "SAT";
     await registration.showNotification("QUANT PRO · XAUUSD " + sideLabel, {
       body: "Yeni H1 + tamamlanmış H4 sinyali. Giriş: " + (signal.entry ?? "—") +
