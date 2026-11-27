@@ -98,7 +98,10 @@ function checkRecentMarketDataContinuity(candles, h4Candles) {
   }
 
   const lastH1Close = recentH1[recentH1.length - 1].time + 3600000;
-  const lastH4Close = recentH4[recentH4.length - 1].end;
+  const latestH4 = recentH4[recentH4.length - 1];
+  const lastH4Close = Number.isFinite(latestH4.end)
+    ? latestH4.end
+    : latestH4.time + 14400000;
   const h4LagMs = lastH1Close - lastH4Close;
   if (!Number.isFinite(h4LagMs) || h4LagMs < 0 || h4LagMs >= 4 * 3600000) {
     return {
