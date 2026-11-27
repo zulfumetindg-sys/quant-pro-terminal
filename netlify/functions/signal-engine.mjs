@@ -1,5 +1,4 @@
 import apiHandler from "../../api/signal-engine.js";
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-const { adaptHandler } = require("./api-adapter.cjs");
+import { adaptHandler } from "./api-adapter.mjs";
+
 export const handler = adaptHandler(apiHandler);
