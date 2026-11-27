@@ -325,7 +325,7 @@ function createSignal(candles, h4Candles, currentPrice) {
 
   const entryFields = {
     entry: currentPrice,
-    entryReference: "LATEST_PROVIDER_PRICE_ESTIMATE",
+    entryReference: "TWELVE_DATA_LAST_1MIN_CANDLE_CLOSE",
     signalReference: "LAST_COMPLETED_H1_CLOSE",
     entryDistancePercent: Number(distance.toFixed(4))
   };
@@ -421,7 +421,7 @@ function createSignal(candles, h4Candles, currentPrice) {
     riskReward: "1:2.0",
     riskRewardBasis: "GROSS_BEFORE_SPREAD_SLIPPAGE_AND_COMMISSION",
     entryModelWarning:
-      "Giriş, Twelve Data son fiyatının yaklaşık tahminidir; bid/ask, spread ve kayma dahil değildir. Mesafe, son tamamlanmış H1 kapanışına göredir."
+      "Giriş, Twelve Data quote yanıtındaki son 1 dakikalık mumun close fiyatıdır; gerçek zamanlı tick veya işlem yapılabilir bid/ask değildir. Spread, kayma ve komisyon dahil değildir. Mesafe, son tamamlanmış H1 kapanışına göredir."
   };
 }
 
@@ -465,6 +465,7 @@ async function getLatestQuote(key) {
     ageSeconds: Math.floor(ageMs / 1000),
     freshness: "LAST_1MIN_CANDLE_TIMESTAMP_VERIFIED_WITHIN_180_SECONDS",
     timestampType: "LAST_1MIN_CANDLE",
+    priceType: "ONE_MINUTE_CANDLE_CLOSE",
     source: "TWELVE_DATA_QUOTE_1MIN_CANDLE"
   };
 }
