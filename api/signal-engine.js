@@ -437,7 +437,7 @@ async function getLatestQuote(key) {
   const body = await response.json();
   const price = Number(body.close);
   // `timestamp` is the interval candle's opening time, not the latest quote update.
-  // Require the dedicated last_quote_at field; never fall back to candle timestamp.
+  // Twelve Data defines last_quote_at as the last 1-minute candle timestamp; it is not an exchange tick timestamp.
   const quoteTimestamp = Number(body.last_quote_at);
 
   if (!response.ok || body.status === "error" ||
@@ -463,8 +463,9 @@ async function getLatestQuote(key) {
     price,
     timestamp: new Date(quoteTimestamp * 1000).toISOString(),
     ageSeconds: Math.floor(ageMs / 1000),
-    freshness: "VERIFIED_WITHIN_180_SECONDS",
-    source: "TWELVE_DATA_QUOTE_1MIN"
+    freshness: "LAST_1MIN_CANDLE_TIMESTAMP_VERIFIED_WITHIN_180_SECONDS",
+    timestampType: "LAST_1MIN_CANDLE",
+    source: "TWELVE_DATA_QUOTE_1MIN_CANDLE"
   };
 }
 
