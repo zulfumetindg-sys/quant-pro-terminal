@@ -106,7 +106,11 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    await redis(["SET", "quant:push:last-signal-id", signal.signalId, "EX", "604800"]);
+    // Keep the signal pending if any endpoint failed transiently. The next hourly
+    // run retries; notification tags prevent repeated visible alerts on devices.
+    if (failed === 0) {
+      await redis(["SET", "quant:push:last-signal-id", signal.signalId, "EX", "604800"]);
+    }
     return res.status(200).json({
       ok: true,
       status: "DISPATCHED",
