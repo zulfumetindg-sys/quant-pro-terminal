@@ -217,146 +217,110 @@ async function loadBacktest() {
   }
 }
 
-let journalToken = "";
+const JOURNAL_STORAGE_KEY = "quantProManualJournalV1";
 let journalState = { trades: [], activeTradeId: "" };
-try { journalToken = sessionStorage.getItem("quantProJournalToken") || ""; } catch (_) {}
-
-function journalRequest(method, body) {
-  if (!journalToken) throw new Error("Önce güvenli kayıt anahtarını gir.");
-  return fetchWithTimeout("/api/manual-journal", {
-    method,
-    cache: "no-store",
-    headers: { Authorization: "Bearer " + journalToken, ...(body ? { "Content-Type": "application/json" } : {}) },
-    body: body ? JSON.stringify(body) : undefined
-  }, 15000).then(async response => {
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.ok) {
-      const messages = {
-        JOURNAL_STORAGE_NOT_CONFIGURED: "Sunucu veritabanı henüz yapılandırılmadı.",
-        ACTIVE_TRADE_EXISTS: "Önce açık işlemi kapatmalısın.",
-        SIGNAL_ALREADY_RECORDED: "Bu sinyal daha önce kaydedildi; tekrar açılamaz.",
-        SIGNAL_EXPIRED_OR_INVALID: "Sinyalin süresi dolmuş veya geçerliliği doğrulanamıyor.",
-        ACTUAL_FILL_RR_BELOW_1_8: "Gerçekleşen giriş fiyatında R:R 1:1,8 altında.",
-        ACTUAL_FILL_TOO_FAR_FROM_SIGNAL: "Gerçekleşen fiyat sinyal referansından %0,10 üzerinde uzak; fiyat kovalanmadı.",
-        TRADE_ID_NOT_ACTIVE: "Kapanış isteği açık işlem kimliğiyle eşleşmiyor.",
-        PRICE_FIELDS_INVALID: "Sinyal veya gerçekleşen fiyat alanları geçersiz.",
-        FILL_PRICE_OUTSIDE_RISK_LEVELS: "Giriş fiyatı SL/TP seviyelerinin dışında.",
-        UNAUTHORIZED: "Kayıt anahtarı geçersiz."
-      };
-      const diagnosticMessages = {
-        UPSTREAM_AUTH: "Veritabanı kimlik doğrulaması reddedildi. Upstash REST URL ve REST Token aynı veritabanından alınmalı.",
-        UPSTREAM_COMMAND: "Veritabanı komutu reddedildi. Sunucu tarafındaki Redis komut uyumluluğu kontrol edilmeli.",
-        UPSTREAM_RATE_LIMIT: "Veritabanı istek sınırına ulaşıldı. Bir süre sonra tekrar deneyin.",
-        UPSTREAM_TIMEOUT: "Veritabanı zaman aşımına uğradı. Upstash bağlantısını kontrol edin.",
-        UPSTREAM_NETWORK: "Sunucu veritabanına bağlanamıyor. Upstash REST bağlantısını kontrol edin.",
-        UPSTREAM_INVALID_RESPONSE: "Veritabanından beklenmeyen yanıt geldi.",
-        UPSTREAM_PROVIDER_ERROR: "Veritabanı sağlayıcısı isteği reddetti.",
-        UPSTREAM_COMMAND_AUTH: "Veritabanı komutu için kimlik doğrulama reddedildi.",
-        UPSTREAM_COMMAND_COMMAND: "Veritabanı komutu desteklenmiyor veya hatalı.",
-        UPSTREAM_COMMAND_RATE_LIMIT: "Veritabanı istek sınırına ulaşıldı.",
-        UPSTREAM_COMMAND_TIMEOUT: "Veritabanı komutu zaman aşımına uğradı.",
-        UPSTREAM_COMMAND_PROVIDER_ERROR: "Veritabanı komutu sağlayıcı tarafından reddedildi."
-      };
-      throw new Error(
-        messages[payload.error] ||
-        diagnosticMessages[payload.diagnosticCode] ||
-        payload.error ||
-        "Kayıt isteği başarısız."
-      );
-    }
-    return payload;
-  });
+try {
+  const saved = JSON.parse(localStorage.getItem(JOURNAL_STORAGE_KEY) || "null");
+  if (saved && Array.isArray(saved.trades) && typeof saved.activeTradeId === "string") journalState = saved;
+} catch (_) {}
+function saveJournal() {
+  try {
+    localStorage.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(journalState));
+    $("journalStatus").textContent = "Bu cihazın tarayıcısına kaydedildi · " + journalState.trades.length + " kayıt.";
+    $("journalStatus").className = "journal-status ok";
+  } catch (_) {
+    $("journalStatus").textContent = "Tarayıcı kaydı başarısız. Depolama alanını kontrol et.";
+    $("journalStatus").className = "journal-status bad";
+  }
 }
-
 function renderManualJournal() {
   const active = journalState.trades.find(x => x.tradeId === journalState.activeTradeId && x.status === "OPEN");
-  $("journalOpenBtn").disabled = !journalToken || !latestSignal || !["BUY", "SELL"].includes(latestSignal.status);
-  $("journalCloseBtn").disabled = !journalToken || !active;
+  $("journalOpenBtn").disabled = !!active;
+  $("journalCloseBtn").disabled = !active;
   $("journalActive").innerHTML = active
-    ? '<h3>Açık manuel işlem</h3><div class="journal-row"><b>' + esc(active.side) + ' · XAUUSD</b><span>Gerçek giriş: ' + esc(fmt(active.fillPrice)) + '</span><span>SL: ' + esc(fmt(active.stopLoss)) + '</span><span>TP: ' + esc(fmt(active.takeProfit)) + '</span><span>R:R: 1:' + esc(active.actualFillRiskReward) + '</span><span>Açılış: ' + esc(active.openedAt) + '</span></div>'
-    : '<h3>Açık manuel işlem yok</h3><p>Yeni kayıt için geçerli AL/SAT sinyali beklenir.</p>';
-
+    ? '<h3>Açık manuel işlem</h3><div class="journal-row"><b>' + esc(active.side) + ' · XAUUSD</b><span>Giriş: ' + fmt(active.fillPrice) + '</span><span>SL: ' + fmt(active.stopLoss) + '</span><span>TP: ' + fmt(active.takeProfit) + '</span><span>Açılış: ' + esc(active.openedAt) + '</span></div>'
+    : '<h3>Açık manuel işlem yok</h3><p>Gerçek MT5 işlemini elle kaydedebilirsin.</p>';
   const history = [...journalState.trades].reverse();
-  $("journalHistory").innerHTML = '<h3>Son manuel işlemler (' + history.length + ')</h3>' +
-    (history.length ? history.slice(0, 30).map(trade =>
-      '<div class="journal-row"><b>' + esc(trade.side) + ' · ' + esc(trade.status) + '</b>' +
-      '<span>Giriş: ' + esc(fmt(trade.fillPrice)) + '</span>' +
-      '<span>Çıkış: ' + esc(trade.exitPrice == null ? "—" : fmt(trade.exitPrice)) + '</span>' +
-      '<span>Sonuç: ' + esc(trade.realizedR == null ? "Açık" : trade.realizedR + "R") + '</span>' +
-      '<span>Başlangıç R:R: 1:' + esc(trade.actualFillRiskReward) + '</span></div>'
-    ).join("") : '<p>Henüz kayıtlı manuel işlem yok.</p>');
+  $("journalHistory").innerHTML = '<h3>İşlem geçmişi (' + history.length + ')</h3>' +
+    (history.length ? history.slice(0, 50).map(t =>
+      '<div class="journal-row"><b>' + esc(t.side) + ' · ' + esc(t.status) + '</b>' +
+      '<span>Giriş: ' + fmt(t.fillPrice) + '</span><span>SL: ' + fmt(t.stopLoss) + '</span>' +
+      '<span>TP: ' + fmt(t.takeProfit) + '</span><span>Çıkış: ' + (t.exitPrice == null ? "—" : fmt(t.exitPrice)) + '</span>' +
+      '<span>Sonuç: ' + (t.realizedR == null ? "Açık" : esc(t.realizedR) + "R") + '</span></div>'
+    ).join("") : '<p>Henüz kayıt yok.</p>');
 }
-
-async function loadManualJournal() {
-  try {
-    const payload = await journalRequest("GET");
-    journalState = payload.state || { trades: [], activeTradeId: "" };
-    renderManualJournal();
-    $("journalStatus").textContent = "Güvenli veritabanına bağlandı · " + journalState.trades.length + " kayıt · sunucu tarafında saklanıyor.";
-    $("journalStatus").className = "journal-status ok";
-  } catch (error) {
-    $("journalStatus").textContent = error.message;
-    $("journalStatus").className = "journal-status bad";
-  }
-}
-
-async function connectManualJournal() {
-  const entered = $("journalToken").value.trim();
-  if (entered.length >= 32) {
-    journalToken = entered;
-    try { sessionStorage.setItem("quantProJournalToken", journalToken); } catch (_) {}
-  } else if (!journalToken) {
-    $("journalStatus").textContent = "En az 32 karakterli sunucu kayıt anahtarını gir.";
-    $("journalStatus").className = "journal-status bad";
-    return;
-  }
-  await loadManualJournal();
-}
-
-async function recordManualOpen() {
+function recordManualOpen() {
+  if (journalState.activeTradeId) return;
+  const side = $("journalSide").value;
   const fillPrice = Number($("journalFillPrice").value);
-  if (!latestSignal || !["BUY", "SELL"].includes(latestSignal.status)) {
-    $("journalStatus").textContent = "Kayıt için geçerli AL/SAT sinyali yok.";
-    $("journalStatus").className = "journal-status bad";
-    return;
+  const stopLoss = Number($("journalStopLoss").value);
+  const takeProfit = Number($("journalTakeProfit").value);
+  if (![fillPrice, stopLoss, takeProfit].every(Number.isFinite) || [fillPrice, stopLoss, takeProfit].some(x => x <= 0)) {
+    $("journalStatus").textContent = "Giriş, SL ve TP fiyatlarını doğru gir.";
+    $("journalStatus").className = "journal-status bad"; return;
   }
-  try {
-    const payload = await journalRequest("POST", { action: "open", signal: { ...latestSignal, symbol: "XAUUSD" }, fillPrice });
-    journalState = payload.state;
-    $("journalFillPrice").value = "";
-    $("journalStatus").textContent = "Manuel açılış kaydı sunucuya kaydedildi.";
-    $("journalStatus").className = "journal-status ok";
-    renderManualJournal();
-  } catch (error) {
-    $("journalStatus").textContent = error.message;
-    $("journalStatus").className = "journal-status bad";
+  const geometry = side === "BUY" ? stopLoss < fillPrice && takeProfit > fillPrice : stopLoss > fillPrice && takeProfit < fillPrice;
+  const rr = Math.abs(takeProfit - fillPrice) / Math.abs(fillPrice - stopLoss);
+  if (!geometry || !Number.isFinite(rr) || rr < 1.8) {
+    $("journalStatus").textContent = "Fiyat yönü hatalı veya brüt R:R 1:1,8 altında. Kayıt yapılmadı.";
+    $("journalStatus").className = "journal-status bad"; return;
   }
+  const trade = {
+    tradeId: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2)),
+    symbol: "XAUUSD", side, fillPrice, stopLoss, takeProfit, plannedRR: +rr.toFixed(3),
+    openedAt: new Date().toISOString(), status: "OPEN", costs: "NOT_INCLUDED"
+  };
+  journalState.trades.push(trade);
+  journalState.activeTradeId = trade.tradeId;
+  $("journalFillPrice").value = $("journalStopLoss").value = $("journalTakeProfit").value = "";
+  saveJournal(); renderManualJournal();
 }
-
-async function recordManualClose() {
-  const active = journalState.trades.find(x => x.tradeId === journalState.activeTradeId && x.status === "OPEN");
+function recordManualClose() {
+  const trade = journalState.trades.find(x => x.tradeId === journalState.activeTradeId && x.status === "OPEN");
   const exitPrice = Number($("journalExitPrice").value);
-  if (!active) return;
-  try {
-    const payload = await journalRequest("POST", { action: "close", tradeId: active.tradeId, exitPrice });
-    journalState = payload.state;
-    $("journalExitPrice").value = "";
-    $("journalStatus").textContent = "Manuel kapanış kaydı sunucuya kaydedildi. Maliyetler dahil değildir.";
-    $("journalStatus").className = "journal-status ok";
-    renderManualJournal();
-  } catch (error) {
-    $("journalStatus").textContent = error.message;
-    $("journalStatus").className = "journal-status bad";
+  if (!trade || !Number.isFinite(exitPrice) || exitPrice <= 0) {
+    $("journalStatus").textContent = "Açık işlem ve geçerli çıkış fiyatı gerekli.";
+    $("journalStatus").className = "journal-status bad"; return;
   }
+  const risk = Math.abs(trade.fillPrice - trade.stopLoss);
+  const pnl = trade.side === "BUY" ? exitPrice - trade.fillPrice : trade.fillPrice - exitPrice;
+  trade.exitPrice = exitPrice;
+  trade.closedAt = new Date().toISOString();
+  trade.realizedR = risk > 0 ? +(pnl / risk).toFixed(4) : null;
+  trade.status = "CLOSED";
+  journalState.activeTradeId = "";
+  $("journalExitPrice").value = "";
+  saveJournal(); renderManualJournal();
 }
-
-$("journalConnectBtn").addEventListener("click", connectManualJournal);
+function exportJournal() {
+  const blob = new Blob([JSON.stringify(journalState, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = "quant-pro-islem-gunlugu.json"; a.click();
+  URL.revokeObjectURL(url);
+}
+function importJournal(event) {
+  const file = event.target.files && event.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(String(reader.result));
+      if (!data || !Array.isArray(data.trades) || typeof data.activeTradeId !== "string" ||
+          data.trades.length > 500 || (data.activeTradeId && !data.trades.some(t => t.tradeId === data.activeTradeId && t.status === "OPEN"))) throw new Error();
+      journalState = data; saveJournal(); renderManualJournal();
+    } catch (_) {
+      $("journalStatus").textContent = "Yedek dosyası geçersiz; mevcut kayıtlar korunuyor.";
+      $("journalStatus").className = "journal-status bad";
+    }
+    event.target.value = "";
+  };
+  reader.readAsText(file);
+}
 $("journalOpenBtn").addEventListener("click", recordManualOpen);
 $("journalCloseBtn").addEventListener("click", recordManualClose);
-if (journalToken) {
-  $("journalToken").value = journalToken;
-  loadManualJournal();
-}
+$("journalExportBtn").addEventListener("click", exportJournal);
+$("journalImportFile").addEventListener("change", importJournal);
+renderManualJournal();
+$("journalStatus").textContent = "Veritabanı gerekmiyor · kayıtlar bu cihazın tarayıcısında tutulur.";
 
 $("refreshBtn").addEventListener("click", () => loadSignal());
 $("backtestBtn").addEventListener("click", loadBacktest);
