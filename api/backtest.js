@@ -590,6 +590,50 @@ function isForwardSignalTime(signalCloseTime) {
   return Number.isFinite(signalCloseTime) && signalCloseTime > FORWARD_START;
 }
 
+function validateForwardTradeSequence(trades, openTrade, startTime = FORWARD_START, now = Date.now()) {
+  const start = typeof startTime === "number" ? startTime : Date.parse(startTime);
+  if (!Number.isFinite(start) || !Number.isFinite(now) || !Array.isArray(trades)) {
+    return { valid: false, reason: "INVALID_TEST_BOUNDARY_OR_TRADE_LIST" };
+  }
+
+  const seen = new Set();
+  for (const trade of trades) {
+    if (!trade || (trade.side !== "BUY" && trade.side !== "SELL")) {
+      return { valid: false, reason: "INVALID_CLOSED_TRADE_SIDE" };
+    }
+    const signalTime = Date.parse(trade.signalTime);
+    const exitTime = Date.parse(trade.exitTime);
+    if (!Number.isFinite(signalTime) || signalTime <= start) {
+      return { valid: false, reason: "TRADE_NOT_STRICTLY_AFTER_FORWARD_START" };
+    }
+    if (!Number.isFinite(exitTime) || exitTime <= signalTime || exitTime > now) {
+      return { valid: false, reason: "INVALID_TRADE_EXIT_TIME" };
+    }
+    if (seen.has(signalTime)) {
+      return { valid: false, reason: "DUPLICATE_SIGNAL_TIME" };
+    }
+    seen.add(signalTime);
+    if (![trade.entry, trade.stopLoss, trade.takeProfit, trade.exit, trade.netR].every(Number.isFinite)) {
+      return { valid: false, reason: "INVALID_TRADE_PRICE_OR_RESULT" };
+    }
+  }
+
+  if (openTrade) {
+    const signalTime = Date.parse(openTrade.signalTime);
+    if (openTrade.open !== true || openTrade.status !== "OPEN_NOT_COUNTED" ||
+        !Number.isFinite(signalTime) || signalTime <= start || seen.has(signalTime)) {
+      return { valid: false, reason: "INVALID_OR_DUPLICATE_OPEN_TRADE" };
+    }
+  }
+
+  return {
+    valid: true,
+    closedTradeCount: trades.length,
+    uniqueSignalCount: seen.size,
+    openTradeExcluded: !!openTrade
+  };
+}
+
 function runForwardTest(candles, h4, indicators, slippage) {
   const trades = [];
   let openTrade = null;
@@ -638,12 +682,14 @@ function runForwardTest(candles, h4, indicators, slippage) {
     i = Math.max(i + 1, exitIndex + 1);
   }
 
+  const integrity = validateForwardTradeSequence(trades, openTrade, FORWARD_START);
   return {
     periodStart: new Date(FORWARD_START).toISOString(),
     spreadUSD: SPREAD_USD,
     slippagePerSideUSD: slippage,
     strategy: "V9_UNCHANGED",
-    closedTradeMetrics: getMetrics(trades),
+    integrity,
+    closedTradeMetrics: integrity.valid ? getMetrics(trades) : null,
     volatilityDiagnostics: summarizeVolatilityDiagnostics([...trades, openTrade]),
     volatilityOutcomes: summarizeVolatilityOutcomes(trades),
     openTrade,
@@ -793,6 +839,15 @@ module.exports = async function handler(req, res) {
         runForwardTest(candles, h4, indicators, slippage)
       );
 
+      if (results.some(result => !result.integrity?.valid)) {
+        return res.status(422).json({
+          ok: false,
+          error: "FORWARD_TEST_INTEGRITY_FAILED",
+          message: "İleri testte tarih sınırı, işlem tekrarı veya işlem verisi doğrulaması başarısız. Performans gösterilmedi.",
+          executionStatus: "RESEARCH_ONLY_NOT_TRADE_READY"
+        });
+      }
+
       return res.status(200).json({
         ok: true,
         schemaVersion: 2,
@@ -907,5 +962,5 @@ module.exports = async function handler(req, res) {
 module.exports.__test = {
   parseTime, emaSeries, ema, makeH4, trend, buildIndicators,
   getMetrics, getSignal, calculateTrade, runBacktest, runForwardTest, summarizeVolatilityDiagnostics, summarizeVolatilityOutcomes,
-  hasForwardWarmup, hasForwardContinuity, isForwardSignalTime
+  hasForwardWarmup, hasForwardContinuity, isForwardSignalTime, validateForwardTradeSequence
 };
