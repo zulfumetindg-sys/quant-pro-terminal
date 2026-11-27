@@ -110,6 +110,40 @@ test("root and public app bundles stay byte-identical", () => {
   assert.equal(root, published);
 });
 
+test("historical regime diagnostics are optional and cannot change the core signal decision", () => {
+  const base = Date.UTC(2026, 0, 5, 0, 0, 0);
+  const data = Array.from({ length: 500 }, (_, i) => {
+    const mid = 2300 + i * 0.08 + 5 * Math.sin(i / 11);
+    return {
+      time: base + i * 3600000,
+      open: mid - 0.05,
+      high: mid + 1.1,
+      low: mid - 1.0,
+      close: mid + 0.03 * Math.cos(i / 3)
+    };
+  });
+  const h4 = backtest.makeH4(data);
+  const indicators = backtest.buildIndicators(data);
+  const index = 495;
+  const closeTime = data[index].time + 3600000;
+  const h4Index = h4.findIndex(x => x.end === closeTime);
+  assert.ok(h4Index >= 20);
+
+  const withDiagnostics = backtest.getSignal(data, h4, indicators, index, h4Index);
+  const withoutDiagnostics = backtest.getSignal(data, h4, indicators, index, h4Index, {
+    includeDiagnostics: false
+  });
+  assert.ok(withDiagnostics);
+  assert.ok(withoutDiagnostics);
+  for (const key of ["side", "atr", "reference", "entryDistancePercent"]) {
+    assert.equal(withoutDiagnostics[key], withDiagnostics[key]);
+  }
+  assert.equal(withoutDiagnostics.trendDiagnostics, null);
+  assert.equal(withoutDiagnostics.volatilityShock, null);
+  assert.ok(withDiagnostics.trendDiagnostics);
+  assert.ok(withDiagnostics.volatilityShock);
+});
+
 test("live and historical indicator calculations agree on the same completed candles", () => {
   const base = Date.UTC(2026, 0, 5, 0, 0, 0);
   const data = Array.from({ length: 600 }, (_, i) => {
