@@ -99,6 +99,40 @@ function summarize(trades) {
       streakStart = null;
     }
   }
+  function blockBootstrap(values, simulations = 2000, blockSize = 10) {
+    if (values.length < blockSize * 5) return { status: "INSUFFICIENT_SAMPLE" };
+    // Fixed-seed circular moving-block bootstrap preserves short-range sequencing.
+    let seed = 0x51a7c0de;
+    const random = () => {
+      seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+      return (seed >>> 0) / 4294967296;
+    };
+    const finalR = [], maxDrawdowns = [];
+    for (let sim = 0; sim < simulations; sim++) {
+      let equityPath = 0, peakPath = 0, maxDDPath = 0, count = 0;
+      while (count < values.length) {
+        const start = Math.floor(random() * values.length);
+        for (let k = 0; k < blockSize && count < values.length; k++, count++) {
+          equityPath += values[(start + k) % values.length];
+          peakPath = Math.max(peakPath, equityPath);
+          maxDDPath = Math.max(maxDDPath, peakPath - equityPath);
+        }
+      }
+      finalR.push(equityPath);
+      maxDrawdowns.push(maxDDPath);
+    }
+    const quantile = (array, p) => {
+      array.sort((a, b) => a - b);
+      return +array[Math.min(array.length - 1, Math.floor((array.length - 1) * p))].toFixed(2);
+    };
+    return {
+      status: "HISTORICAL_BLOCK_BOOTSTRAP_NOT_A_FORECAST",
+      simulations, blockSizeTrades: blockSize,
+      probabilityOfNegativeNetRPercent: +(finalR.filter(x => x < 0).length / simulations * 100).toFixed(2),
+      finalNetRPercentiles: { p05: quantile(finalR, 0.05), p50: quantile(finalR, 0.50), p95: quantile(finalR, 0.95) },
+      maxDrawdownRPercentiles: { p50: quantile(maxDrawdowns, 0.50), p95: quantile(maxDrawdowns, 0.95) }
+    };
+  }
   const group = list => {
     const wins = list.filter(t => t.netR > 0).length;
     const losses = list.filter(t => t.netR < 0).length;
@@ -143,6 +177,7 @@ function summarize(trades) {
   );
   return {
     overall: group(ordered),
+    historicalBlockBootstrap: blockBootstrap(ordered.map(t => t.netR)),
     chronologicalMaxDrawdownR: +maxDD.toFixed(3),
     illustrativeRiskModel: {
       riskPercentOfCurrentEquityPerTrade: 0.5,
