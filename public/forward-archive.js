@@ -23,6 +23,29 @@
     });
   }
 
+  function validRecord(row) {
+    if (!row || typeof row !== "object" || typeof row.key !== "string" ||
+        ![0.1, 0.2].includes(Number(row.slippagePerSideUSD)) ||
+        !["BUY", "SELL"].includes(row.side) ||
+        !Number.isFinite(Date.parse(row.signalTime)) ||
+        !Number.isFinite(Date.parse(row.exitTime)) ||
+        Date.parse(row.exitTime) <= Date.parse(row.signalTime) ||
+        !Number.isFinite(Date.parse(row.firstObservedAt)) ||
+        ![row.entry, row.stopLoss, row.takeProfit, row.exit, row.netR].every(Number.isFinite) ||
+        typeof row.exitReason !== "string") return false;
+    const canonicalKey = Number(row.slippagePerSideUSD).toFixed(3) + "|" +
+      row.side + "|" + new Date(Date.parse(row.signalTime)).toISOString();
+    return row.key === canonicalKey;
+  }
+
+  function validConflict(row) {
+    return !!row && typeof row === "object" &&
+      typeof row.key === "string" && row.key.length <= 160 &&
+      Number.isFinite(Date.parse(row.firstObservedAt)) &&
+      Number.isFinite(Date.parse(row.observedAt)) &&
+      typeof row.note === "string" && row.note.length <= 240;
+  }
+
   function summarize(records, slippage) {
     const rows = records.filter(x => x.slippagePerSideUSD === slippage);
     const wins = rows.filter(x => x.netR > 0).length;
@@ -157,12 +180,17 @@
   function restoreBackup(json, storage) {
     if (!storage || typeof storage.getItem !== "function" ||
         typeof storage.setItem !== "function") return { ok: false, error: "LOCAL_STORAGE_UNAVAILABLE" };
+    if (typeof json !== "string" || json.length > 1_000_000) {
+      return { ok: false, error: "INVALID_FORWARD_BACKUP" };
+    }
     const backup = safeParse(json);
     const incoming = backup && backup.archive;
     if (!backup || backup.backupType !== "QUANT_PRO_FORWARD_ARCHIVE" ||
+        !Number.isFinite(Date.parse(backup.exportedAt)) ||
         !incoming || incoming.schemaVersion !== 1 || incoming.symbol !== "XAUUSD" ||
         !Number.isFinite(Date.parse(incoming.trackingStartedAt)) ||
         !Number.isFinite(Date.parse(incoming.lastCheckedAt || incoming.trackingStartedAt)) ||
+        (incoming.fixedTestStart != null && !Number.isFinite(Date.parse(incoming.fixedTestStart))) ||
         !Array.isArray(incoming.records) || incoming.records.length > MAX_RECORDS ||
         !Array.isArray(incoming.conflicts) || incoming.conflicts.length > 100) {
       return { ok: false, error: "INVALID_FORWARD_BACKUP" };
@@ -170,23 +198,22 @@
 
     const seen = new Set();
     for (const row of incoming.records) {
-      if (!row || typeof row.key !== "string" || seen.has(row.key) ||
-          ![0.1, 0.2].includes(Number(row.slippagePerSideUSD)) ||
-          !["BUY", "SELL"].includes(row.side) ||
-          !Number.isFinite(Date.parse(row.signalTime)) ||
-          !Number.isFinite(Date.parse(row.exitTime)) ||
-          Date.parse(row.exitTime) <= Date.parse(row.signalTime) ||
-          !Number.isFinite(Date.parse(row.firstObservedAt)) ||
-          ![row.entry, row.stopLoss, row.takeProfit, row.exit, row.netR].every(Number.isFinite) ||
-          typeof row.exitReason !== "string") {
+      if (!validRecord(row) || seen.has(row.key)) {
         return { ok: false, error: "INVALID_FORWARD_BACKUP" };
       }
       seen.add(row.key);
     }
+    if (!incoming.conflicts.every(validConflict)) {
+      return { ok: false, error: "INVALID_FORWARD_BACKUP" };
+    }
 
     const current = read(storage);
     if (current !== null && (current.schemaVersion !== 1 || current.symbol !== "XAUUSD" ||
-        !Array.isArray(current.records) || !Array.isArray(current.conflicts))) {
+        !Number.isFinite(Date.parse(current.trackingStartedAt)) ||
+        !Array.isArray(current.records) || current.records.length > MAX_RECORDS ||
+        !current.records.every(validRecord) ||
+        !Array.isArray(current.conflicts) || current.conflicts.length > 100 ||
+        !current.conflicts.every(validConflict))) {
       return { ok: false, error: "LOCAL_ARCHIVE_INVALID" };
     }
     const merged = current || {
@@ -221,7 +248,14 @@
     if (Date.parse(incoming.lastCheckedAt || incoming.trackingStartedAt) > Date.parse(merged.lastCheckedAt)) {
       merged.lastCheckedAt = incoming.lastCheckedAt || incoming.trackingStartedAt;
     }
-    merged.conflicts = merged.conflicts.concat(incoming.conflicts).slice(-100);
+    const conflictByKey = new Map(merged.conflicts.map(item => [item.key, item]));
+    for (const conflict of incoming.conflicts) {
+      if (!conflictByKey.has(conflict.key)) {
+        merged.conflicts.push(conflict);
+        conflictByKey.set(conflict.key, conflict);
+      }
+    }
+    merged.conflicts = merged.conflicts.slice(-100);
     try {
       storage.setItem(STORAGE_KEY, JSON.stringify(merged));
     } catch (_) {
