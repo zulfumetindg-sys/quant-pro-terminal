@@ -400,6 +400,30 @@ function runBacktest(candles, h4, indicators, slippage, period) {
   const periodStart = Date.parse(period.start);
   const periodEnd = Date.parse(period.end);
 
+  // Every scored period must have its own pre-period indicator warmup.
+  // Do not score a period when the provider's retained history starts too late.
+  const warmupComplete = hasForwardWarmup(candles, periodStart);
+  if (!warmupComplete) {
+    const completedH1 = candles.filter(c => c.time + 3600000 <= periodStart).length;
+    const completedH4 = h4.filter(c => c.end <= periodStart).length;
+    return {
+      period: period.name,
+      periodComplete: false,
+      periodStatus: "PERIOD_WARMUP_INCOMPLETE",
+      warmupComplete: false,
+      warmupRequired: { completedH1: 400, completedH4: 100 },
+      warmupAvailable: { completedH1, completedH4 },
+      spreadUSD: SPREAD_USD,
+      slippagePerSideUSD: slippage,
+      metrics: null,
+      volatilityDiagnostics: null,
+      volatilityOutcomes: null,
+      openTrade: null,
+      lastTrades: [],
+      warning: "Dönem başlangıcından önce yeterli tamamlanmış H1/H4 geçmişi bulunmadığı için performans hesaplanmadı."
+    };
+  }
+
   const firstAfterPeriod = candles.findIndex(
     x => x.time >= periodEnd
   );
