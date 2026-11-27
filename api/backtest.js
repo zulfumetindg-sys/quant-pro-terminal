@@ -584,6 +584,10 @@ function hasForwardContinuity(candles, forwardStart) {
   return true;
 }
 
+function isForwardSignalTime(signalCloseTime) {
+  return Number.isFinite(signalCloseTime) && signalCloseTime > FORWARD_START;
+}
+
 function runForwardTest(candles, h4, indicators, slippage) {
   const trades = [];
   let openTrade = null;
@@ -593,8 +597,8 @@ function runForwardTest(candles, h4, indicators, slippage) {
   while (i < candles.length - 1) {
     const signalCloseTime = candles[i].time + 3600000;
 
-    // Başlangıç anındaki ve öncesindeki mumları kesinlikle alma.
-    if (signalCloseTime <= FORWARD_START) {
+    // The pinned out-of-sample boundary is strict: the start candle itself is excluded.
+    if (!isForwardSignalTime(signalCloseTime)) {
       i++;
       continue;
     }
@@ -901,5 +905,5 @@ module.exports = async function handler(req, res) {
 module.exports.__test = {
   parseTime, emaSeries, ema, makeH4, trend, buildIndicators,
   getMetrics, getSignal, calculateTrade, runBacktest, runForwardTest, summarizeVolatilityDiagnostics, summarizeVolatilityOutcomes,
-  hasForwardWarmup, hasForwardContinuity
+  hasForwardWarmup, hasForwardContinuity, isForwardSignalTime
 };
