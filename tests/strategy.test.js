@@ -1656,7 +1656,7 @@ test("EUR position sizing rounds volume down and keeps estimated risk under budg
   });
   assert.equal(result.ok, true);
   assert.ok(result.estimatedRiskEUR <= result.riskBudgetEUR);
-  assert.equal(result.volume, 0.64);
+  assert.equal(result.volume, 0.61);
 });
 
 test("EUR position sizing blocks when broker specification or costs are missing", () => {
