@@ -1045,6 +1045,27 @@ test("manual journal rejects incomplete negative mutation results", async () => 
 });
 
 
+test("historical period is not scored when its candles contain a gap over 72 hours", () => {
+  const base = Date.UTC(2026, 4, 1, 0, 0, 0);
+  const data = Array.from({ length: 1100 }, (_, i) =>
+    candle(base + i * 3600000 + (i >= 700 ? 96 * 3600000 : 0),
+      2300 + i * 0.03 + 2 * Math.sin(i / 9), 1)
+  );
+  const h4 = backtest.makeH4(data);
+  const indicators = backtest.buildIndicators(data);
+  const result = backtest.runBacktest(
+    data, h4, indicators, 0.1,
+    {
+      name: "GAPPED_PERIOD",
+      start: new Date(base + 500 * 3600000).toISOString(),
+      end: new Date(base + 900 * 3600000).toISOString()
+    }
+  );
+  assert.equal(result.periodStatus, "PERIOD_DATA_GAP");
+  assert.equal(result.continuityComplete, false);
+  assert.equal(result.metrics, null);
+});
+
 test("historical period is not scored without its own 400 H1 and 100 H4 warmup", () => {
   const base = Date.UTC(2026, 4, 1, 0, 0, 0);
   const data = Array.from({ length: 1000 }, (_, i) =>
