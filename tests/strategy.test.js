@@ -319,6 +319,7 @@ test("fresh last_quote_at is accepted even when interval timestamp is old", asyn
     assert.equal(quote.price, 2650.25);
     assert.equal(quote.ageSeconds, 30);
     assert.equal(quote.timestampType, "LAST_1MIN_CANDLE");
+    assert.equal(quote.priceType, "ONE_MINUTE_CANDLE_CLOSE");
     assert.equal(quote.freshness, "LAST_1MIN_CANDLE_TIMESTAMP_VERIFIED_WITHIN_180_SECONDS");
   } finally {
     global.fetch = originalFetch;
