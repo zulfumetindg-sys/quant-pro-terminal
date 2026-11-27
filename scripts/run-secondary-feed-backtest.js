@@ -157,11 +157,13 @@ function summarize(trades) {
       averageR: n ? +(net / n).toFixed(3) : null
     };
   };
-  const byMonth = {}, byYear = {}, byQuarter = {}, byHourUTC = {}, byEntryHourUTC = {};
+  const byMonth = {}, byYear = {}, byQuarter = {}, byHourUTC = {}, byEntryHourUTC = {}, byEntryHourUTCAndSide = {};
   for (const t of ordered) {
     const entryDate = new Date(t.signalTime);
     const entryHour = String(entryDate.getUTCHours()).padStart(2, "0") + ":00";
     (byEntryHourUTC[entryHour] ||= []).push(t);
+    const entryHourSide = entryHour + "_" + t.side;
+    (byEntryHourUTCAndSide[entryHourSide] ||= []).push(t);
     const date = new Date(t.exitTime);
     const year = String(date.getUTCFullYear());
     const month = t.exitTime.slice(0, 7);
@@ -197,7 +199,8 @@ function summarize(trades) {
     byExitQuarter: summarizeMap(byQuarter),
     byExitMonth: summarizeMap(byMonth),
     byExitHourUTC: summarizeMap(byHourUTC),
-    byEntryHourUTC: summarizeMap(byEntryHourUTC)
+    byEntryHourUTC: summarizeMap(byEntryHourUTC),
+    byEntryHourUTCAndSide: summarizeMap(byEntryHourUTCAndSide)
   };
 }
 
