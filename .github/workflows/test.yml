@@ -2,7 +2,7 @@ name: QUANT PRO regression tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/mobile-signal-alerts]
   pull_request:
     branches: [main, feature/signal-identity]
 
