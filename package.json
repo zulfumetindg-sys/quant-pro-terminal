@@ -7,7 +7,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --check app.js && node --check public/app.js && node --check api/push-utils.js && node --check api/push-config.js && node --check api/push-subscribe.js && node --check api/push-dispatch.js && node --check api/push-auth.js && node --test"
+    "test": "node --check app.js && node --check public/app.js && node --check lib/push-utils.js && node --check api/push-config.js && node --check api/push-subscribe.js && node --check api/push-dispatch.js && node --check lib/push-auth.js && node --test"
   },
   "dependencies": {
     "web-push": "^3.6.7"
