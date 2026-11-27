@@ -395,7 +395,7 @@ function summarizeVolatilityOutcomes(trades) {
   };
 }
 
-function hasPeriodContinuity(candles, periodStart, periodEnd, periodComplete) {
+function hasPeriodContinuity(candles, periodStart, periodEnd, periodComplete, now = Date.now()) {
   const periodCandles = candles.filter(
     candle => candle.time >= periodStart && candle.time < periodEnd
   );
@@ -410,17 +410,17 @@ function hasPeriodContinuity(candles, periodStart, periodEnd, periodComplete) {
     }
   }
 
+  const lastClose = periodCandles[periodCandles.length - 1].time + 3600000;
+  if (!Number.isFinite(now) || now < lastClose || now - lastClose > maxGapMs) return false;
+
   // For a finished period, require its final candle to reach the boundary
   // within the same conservative weekend/holiday gap allowance.
-  if (periodComplete) {
-    const lastClose = periodCandles[periodCandles.length - 1].time + 3600000;
-    if (periodEnd - lastClose > maxGapMs) return false;
-  }
+  if (periodComplete && periodEnd - lastClose > maxGapMs) return false;
 
   return true;
 }
 
-function runBacktest(candles, h4, indicators, slippage, period) {
+function runBacktest(candles, h4, indicators, slippage, period, now = Date.now()) {
   const trades = [];
   const periodStart = Date.parse(period.start);
   const periodEnd = Date.parse(period.end);
@@ -454,7 +454,7 @@ function runBacktest(candles, h4, indicators, slippage, period) {
   );
   const periodComplete = firstAfterPeriod >= 0;
   const periodContinuity = hasPeriodContinuity(
-    candles, periodStart, periodEnd, periodComplete
+    candles, periodStart, periodEnd, periodComplete, now
   );
   if (!periodContinuity) {
     return {
@@ -471,7 +471,7 @@ function runBacktest(candles, h4, indicators, slippage, period) {
       volatilityOutcomes: null,
       openTrade: null,
       lastTrades: [],
-      warning: "Test döneminde 72 saati aşan veri boşluğu veya dönem sınırına yakın yeterli mum bulunmadığı için performans hesaplanmadı."
+      warning: "Test döneminde 72 saati aşan veri boşluğu, güncel olmayan son mum veya dönem sınırına yakın yeterli mum bulunmadığı için performans hesaplanmadı."
     };
   }
 
