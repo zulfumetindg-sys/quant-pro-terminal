@@ -9,6 +9,36 @@ const journal = require("../api/manual-journal.js").__test;
 const fs = require("node:fs");
 const path = require("node:path");
 
+test("historical backtest period requests include 30 days of independent warmup", () => {
+  const window = backtest.getPeriodRequestWindow({
+    start: "2026-05-01T00:00:00Z",
+    end: "2026-07-01T00:00:00Z"
+  });
+  const start = Date.parse(window.startDate.replace(" ", "T") + "Z");
+  const end = Date.parse(window.endDate.replace(" ", "T") + "Z");
+  assert.equal(window.warmupDays, 30);
+  assert.equal(start, Date.parse("2026-04-01T00:00:00Z"));
+  assert.equal(end, Date.parse("2026-07-01T00:00:00Z"));
+  assert.throws(() => backtest.getPeriodRequestWindow({
+    start: "2026-07-01T00:00:00Z",
+    end: "2026-05-01T00:00:00Z"
+  }), /INVALID_BACKTEST_PERIOD/);
+});
+
+test("historical candle normalization deduplicates, validates OHLC and excludes incomplete bars", () => {
+  const now = Date.parse("2026-11-27T12:30:00Z");
+  const values = [
+    { datetime: "2026-11-27 09:00:00", open: "100", high: "102", low: "99", close: "101" },
+    { datetime: "2026-11-27 09:00:00", open: "100", high: "103", low: "99", close: "102" },
+    { datetime: "2026-11-27 10:00:00", open: "100", high: "90", low: "99", close: "101" },
+    { datetime: "2026-11-27 12:00:00", open: "100", high: "103", low: "99", close: "102" }
+  ];
+  const candles = backtest.normalizeHistoricalCandles(values, now);
+  assert.equal(candles.length, 1);
+  assert.equal(candles[0].time, Date.parse("2026-11-27T09:00:00Z"));
+  assert.equal(candles[0].close, 102);
+});
+
 test("root and public app bundles stay byte-identical", () => {
   const root = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
   const published = fs.readFileSync(path.join(__dirname, "..", "public", "app.js"), "utf8");
