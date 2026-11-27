@@ -106,22 +106,65 @@ function parseRedisState(raw) {
   return state;
 }
 
-async function redisCommand(path, method, body, env) {
-  const base = String(env.KV_REST_API_URL || "").replace(/\/+$/, "");
+function providerErrorCategory(message) {
+  const value = String(message || "").toLowerCase();
+  if (/unauthorized|invalid.*token|wrongpass|noauth|authentication/.test(value)) return "AUTH";
+  if (/unknown command|unsupported command|syntax error|wrong number of arguments/.test(value)) return "COMMAND";
+  if (/rate limit|too many requests|quota/.test(value)) return "RATE_LIMIT";
+  if (/timeout|timed out/.test(value)) return "TIMEOUT";
+  return "PROVIDER_ERROR";
+}
+
+async function redisCommand(path, method, body, env, operation) {
+  const base = String(env.KV_REST_API_URL || "").replace(/\\/+$/, "");
   const token = env.KV_REST_API_TOKEN;
   if (!base || !token) throw new Error("JOURNAL_STORAGE_NOT_CONFIGURED");
-  const response = await fetch(base + path, {
-    method,
-    headers: {
-      Authorization: "Bearer " + token,
-      "Content-Type": "application/json"
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(10000)
-  });
-  if (!response.ok) throw new Error("JOURNAL_STORAGE_UNAVAILABLE");
-  const payload = await response.json();
-  if (payload.error) throw new Error("JOURNAL_STORAGE_COMMAND_FAILED");
+
+  let response;
+  try {
+    response = await fetch(base + path, {
+      method,
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "application/json"
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(10000)
+    });
+  } catch (error) {
+    const code = error && (error.name === "TimeoutError" || error.name === "AbortError")
+      ? "TIMEOUT"
+      : "NETWORK";
+    console.error("[manual-journal] Redis request failed", { operation, code });
+    throw new Error("JOURNAL_STORAGE_UNAVAILABLE");
+  }
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    console.error("[manual-journal] Redis returned non-JSON response", {
+      operation,
+      httpStatus: response.status
+    });
+    throw new Error("JOURNAL_STORAGE_UNAVAILABLE");
+  }
+
+  if (!response.ok) {
+    console.error("[manual-journal] Redis HTTP error", {
+      operation,
+      httpStatus: response.status,
+      providerCategory: providerErrorCategory(payload && payload.error)
+    });
+    throw new Error("JOURNAL_STORAGE_UNAVAILABLE");
+  }
+  if (payload && payload.error) {
+    console.error("[manual-journal] Redis command error", {
+      operation,
+      providerCategory: providerErrorCategory(payload.error)
+    });
+    throw new Error("JOURNAL_STORAGE_COMMAND_FAILED");
+  }
   return payload.result;
 }
 
@@ -189,7 +232,7 @@ return cjson.encode({ ok = true, state = state })
 `;
 
 async function getState(env) {
-  const raw = await redisCommand("/get/" + encodeURIComponent(JOURNAL_KEY), "GET", undefined, env);
+  const raw = await redisCommand("/get/" + encodeURIComponent(JOURNAL_KEY), "GET", undefined, env, "GET_STATE");
   return parseRedisState(raw);
 }
 
@@ -208,7 +251,7 @@ async function mutate(action, args, env) {
     "1",
     JOURNAL_KEY,
     ...buildMutationArguments(action, args)
-  ], env);
+  ], env, "MUTATE");
   return typeof result === "string" ? JSON.parse(result) : result;
 }
 
