@@ -452,6 +452,8 @@ test("forward trade integrity rejects pre-start, duplicate and invalid closed tr
   assert.equal(backtest.validateForwardTradeSequence([beforeStart], null, start, start + 7200000).reason, "TRADE_NOT_STRICTLY_AFTER_FORWARD_START");
   const open = { ...trade, open: true, status: "OPEN_NOT_COUNTED", lastPrice: 101, unrealizedR: 1 };
   assert.equal(backtest.validateForwardTradeSequence([], open, start, start + 7200000).openTradeExcluded, true);
+  const futureOpen = { ...open, signalTime: new Date(start + 9000000).toISOString() };
+  assert.equal(backtest.validateForwardTradeSequence([], futureOpen, start, start + 7200000).reason, "INVALID_OR_DUPLICATE_OPEN_TRADE");
   assert.equal(backtest.validateForwardTradeSequence([trade], open, start, start + 7200000).reason, "INVALID_OR_DUPLICATE_OPEN_TRADE");
 });
 
