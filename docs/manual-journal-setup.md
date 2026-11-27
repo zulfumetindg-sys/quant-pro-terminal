@@ -4,7 +4,7 @@ The manual journal is an authenticated, server-side XAUUSD trade ledger. It does
 
 ## Required services and environment variables
 
-Create a small Redis database with Upstash Redis and copy its REST URL and REST token. In the Vercel project, add these Production environment variables:
+Create a small Redis database with Upstash Redis and copy its REST URL and REST token. For the pull-request Preview deployment, add these variables to the Vercel **Preview** environment. Add them to **Production** only when the feature is deliberately released to the production domain:
 
 - `KV_REST_API_URL`: Upstash Redis REST URL.
 - `KV_REST_API_TOKEN`: Upstash Redis REST token. Server-side only.
@@ -20,8 +20,8 @@ Do not commit these values, put them in frontend JavaScript, or share screenshot
 
 ## Using the journal
 
-1. Open the deployed QUANT PRO terminal over HTTPS.
-2. In **Manuel işlem kaydı**, enter the `JOURNAL_ACCESS_TOKEN` and connect.
+1. Open the feature-branch Preview URL over HTTPS.
+2. In **Manuel işlem kaydı**, enter the secret VALUE stored in Vercel as `JOURNAL_ACCESS_TOKEN` (not the variable name) and connect.
 3. When a current XAUUSD BUY/SELL signal exists, enter the actual MT5 fill price and save the opening.
 4. When the position is manually closed in MT5, enter the actual exit price and save the closing.
 5. Reconnect with the same access token to load the same server-side ledger from another device.
