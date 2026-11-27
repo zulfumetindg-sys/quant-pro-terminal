@@ -87,7 +87,8 @@ const aggregateBySlippage = [0.10, 0.20].map(slippage => {
     note: "Worst drawdown among included periods; not a combined chronological drawdown."
   };
 });
-\nconst report = {
+
+const report = {
   report: "QUANT_PRO_EXACT_ENGINE_PUBLIC_DATA_CROSS_CHECK",
   engine: "api/backtest.js current branch implementation",
   provider: "GetData public XAUUSD 1H sample",
@@ -105,6 +106,7 @@ const aggregateBySlippage = [0.10, 0.20].map(slippage => {
     commissionIncluded: false,
     brokerCostsVerified: false
   },
+  aggregateBySlippage,
   results
 };
 
