@@ -98,16 +98,41 @@ function calculateRealizedR(trade, exitPrice) {
 }
 
 function parseRedisState(raw) {
-  if (raw == null || raw === "") return { trades: [], activeTradeId: "" };
+  if (raw == null) return { trades: [], activeTradeId: "" };
   let state;
   try {
     state = typeof raw === "string" ? JSON.parse(raw) : raw;
   } catch {
     throw storageError("JOURNAL_STATE_INVALID", "UPSTREAM_INVALID_RESPONSE");
   }
-  if (!state || typeof state !== "object" || !Array.isArray(state.trades) ||
-      typeof state.activeTradeId !== "string") {
+  const invalid = () => {
     throw storageError("JOURNAL_STATE_INVALID", "UPSTREAM_INVALID_RESPONSE");
+  };
+  if (!state || typeof state !== "object" || Array.isArray(state) ||
+      !Array.isArray(state.trades) || state.trades.length > MAX_TRADES ||
+      typeof state.activeTradeId !== "string") invalid();
+
+  const ids = new Set();
+  let openCount = 0;
+  for (const trade of state.trades) {
+    if (!trade || typeof trade !== "object" || Array.isArray(trade) ||
+        typeof trade.tradeId !== "string" || !/^[0-9a-f-]{36}$/i.test(trade.tradeId) ||
+        ids.has(trade.tradeId) ||
+        typeof trade.signalId !== "string" ||
+        trade.symbol !== "XAUUSD" ||
+        !["BUY", "SELL"].includes(trade.side) ||
+        !["OPEN", "CLOSED"].includes(trade.status) ||
+        ![trade.fillPrice, trade.stopLoss, trade.takeProfit].every(value =>
+          typeof value === "number" && Number.isFinite(value) && value > 0)) invalid();
+    ids.add(trade.tradeId);
+    if (trade.status === "OPEN") openCount++;
+  }
+  if (openCount > 1) invalid();
+  if (state.activeTradeId === "") {
+    if (openCount !== 0) invalid();
+  } else {
+    const active = state.trades.find(trade => trade.tradeId === state.activeTradeId);
+    if (!active || active.status !== "OPEN" || openCount !== 1) invalid();
   }
   return state;
 }
