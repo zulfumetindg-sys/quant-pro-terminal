@@ -243,7 +243,26 @@ function journalRequest(method, body) {
         FILL_PRICE_OUTSIDE_RISK_LEVELS: "Giriş fiyatı SL/TP seviyelerinin dışında.",
         UNAUTHORIZED: "Kayıt anahtarı geçersiz."
       };
-      throw new Error(messages[payload.error] || payload.error || "Kayıt isteği başarısız.");
+      const diagnosticMessages = {
+        UPSTREAM_AUTH: "Veritabanı kimlik doğrulaması reddedildi. Upstash REST URL ve REST Token aynı veritabanından alınmalı.",
+        UPSTREAM_COMMAND: "Veritabanı komutu reddedildi. Sunucu tarafındaki Redis komut uyumluluğu kontrol edilmeli.",
+        UPSTREAM_RATE_LIMIT: "Veritabanı istek sınırına ulaşıldı. Bir süre sonra tekrar deneyin.",
+        UPSTREAM_TIMEOUT: "Veritabanı zaman aşımına uğradı. Upstash bağlantısını kontrol edin.",
+        UPSTREAM_NETWORK: "Sunucu veritabanına bağlanamıyor. Upstash REST bağlantısını kontrol edin.",
+        UPSTREAM_INVALID_RESPONSE: "Veritabanından beklenmeyen yanıt geldi.",
+        UPSTREAM_PROVIDER_ERROR: "Veritabanı sağlayıcısı isteği reddetti.",
+        UPSTREAM_COMMAND_AUTH: "Veritabanı komutu için kimlik doğrulama reddedildi.",
+        UPSTREAM_COMMAND_COMMAND: "Veritabanı komutu desteklenmiyor veya hatalı.",
+        UPSTREAM_COMMAND_RATE_LIMIT: "Veritabanı istek sınırına ulaşıldı.",
+        UPSTREAM_COMMAND_TIMEOUT: "Veritabanı komutu zaman aşımına uğradı.",
+        UPSTREAM_COMMAND_PROVIDER_ERROR: "Veritabanı komutu sağlayıcı tarafından reddedildi."
+      };
+      throw new Error(
+        messages[payload.error] ||
+        diagnosticMessages[payload.diagnosticCode] ||
+        payload.error ||
+        "Kayıt isteği başarısız."
+      );
     }
     return payload;
   });
