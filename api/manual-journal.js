@@ -311,5 +311,6 @@ module.exports.__test = {
   validateClosePayload,
   calculateRealizedR,
   parseRedisState,
-  buildMutationArguments
+  buildMutationArguments,
+  providerErrorCategory
 };
