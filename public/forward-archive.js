@@ -47,16 +47,35 @@
   }
 
   function summarize(records, slippage) {
-    const rows = records.filter(x => x.slippagePerSideUSD === slippage);
-    const wins = rows.filter(x => x.netR > 0).length;
-    const losses = rows.filter(x => x.netR < 0).length;
+    const rows = records
+      .filter(x => x.slippagePerSideUSD === slippage)
+      .sort((a, b) => Date.parse(a.exitTime) - Date.parse(b.exitTime));
+    const wins = rows.filter(x => x.netR > 0);
+    const losses = rows.filter(x => x.netR < 0);
+    const grossWinR = wins.reduce((sum, x) => sum + x.netR, 0);
+    const grossLossR = Math.abs(losses.reduce((sum, x) => sum + x.netR, 0));
+    const netR = rows.reduce((sum, x) => sum + x.netR, 0);
+    let equity = 0;
+    let peak = 0;
+    let maxDrawdownR = 0;
+    for (const row of rows) {
+      equity += row.netR;
+      peak = Math.max(peak, equity);
+      maxDrawdownR = Math.max(maxDrawdownR, peak - equity);
+    }
     return {
       slippagePerSideUSD: slippage,
       tradeCount: rows.length,
-      wins,
-      losses,
-      netR: +rows.reduce((sum, x) => sum + x.netR, 0).toFixed(3),
-      winRatePercent: rows.length >= 30 ? +(wins / rows.length * 100).toFixed(2) : null,
+      wins: wins.length,
+      losses: losses.length,
+      breakEven: rows.length - wins.length - losses.length,
+      grossWinR: +grossWinR.toFixed(3),
+      grossLossR: +grossLossR.toFixed(3),
+      profitFactor: grossLossR > 0 ? +(grossWinR / grossLossR).toFixed(3) : grossWinR > 0 ? "NO_LOSSES" : null,
+      netR: +netR.toFixed(3),
+      averageR: rows.length ? +(netR / rows.length).toFixed(3) : null,
+      maxDrawdownR: +maxDrawdownR.toFixed(3),
+      winRatePercent: rows.length >= 30 ? +(wins.length / rows.length * 100).toFixed(2) : null,
       sampleStatus: rows.length >= 30 ? "MINIMUM_30_REACHED_NOT_A_LIVE_PROBABILITY" : "INSUFFICIENT_SAMPLE"
     };
   }
