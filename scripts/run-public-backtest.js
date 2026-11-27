@@ -38,9 +38,10 @@ const periods = [
   { name: "EYLUL_KASIM", start: "2026-09-01T00:00:00Z", end: "2026-12-01T00:00:00Z" }
 ];
 
+const slippageScenarios = [0.10, 0.20, 0.30, 0.50];
 const results = [];
 const diagnosticTradesBySlippage = new Map();
-for (const slippage of [0.10, 0.20]) {
+for (const slippage of slippageScenarios) {
   for (const period of periods) {
     const result = engine.runBacktest(candles, h4, indicators, slippage, period, Date.now(), { includeTrades: true });
     if (result.periodStatus === "PERIOD_COMPLETE" && Array.isArray(result.closedTrades)) {
@@ -64,7 +65,7 @@ for (const slippage of [0.10, 0.20]) {
 }
 
 
-const aggregateBySlippage = [0.10, 0.20].map(slippage => {
+const aggregateBySlippage = slippageScenarios.map(slippage => {
   const included = results.filter(x =>
     x.slippagePerSideUSD === slippage &&
     x.periodStatus === "PERIOD_COMPLETE" &&
@@ -182,7 +183,7 @@ function monteCarloBootstrap(trades, iterations = 10000) {
 }
 
 const sequenceDiagnostics = {};
-for (const slippage of [0.10, 0.20]) {
+for (const slippage of slippageScenarios) {
   const trades = diagnosticTradesBySlippage.get(slippage) || [];
   sequenceDiagnostics[String(slippage)] = {
     ...summarizeTradeSequence(trades),
@@ -204,7 +205,7 @@ const report = {
   strategyChanged: false,
   costAssumptions: {
     spreadUSD: 0.30,
-    slippagePerSideUSD: [0.10, 0.20],
+    slippagePerSideUSD: slippageScenarios,
     commissionIncluded: false,
     brokerCostsVerified: false
   },
