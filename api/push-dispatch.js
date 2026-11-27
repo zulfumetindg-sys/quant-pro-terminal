@@ -1,6 +1,7 @@
 const webpush = require("web-push");
 const { backgroundPushConfigured, encodePushBody } = require("./push-utils");
 const { validateSignalIdentity } = require("../public/signal-notification-policy");
+const { verifyGithubOidcRequest } = require("./push-auth");
 
 async function redis(command) {
   const response = await fetch(process.env.KV_REST_API_URL, {
@@ -16,19 +17,13 @@ async function redis(command) {
   return result.result;
 }
 
-function authorized(req) {
-  const expected = "Bearer " + (process.env.CRON_SECRET || "");
-  const actual = req.headers.authorization || "";
-  return expected.length > 20 && actual.length === expected.length && actual === expected;
-}
-
 module.exports = async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   if (req.method !== "GET" && req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "METHOD_NOT_ALLOWED" });
   }
-  if (!authorized(req)) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  if (!(await verifyGithubOidcRequest(req))) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
   if (!backgroundPushConfigured()) {
     return res.status(200).json({ ok: true, status: "DISABLED_NO_OP" });
   }
