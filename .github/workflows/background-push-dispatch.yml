@@ -36,5 +36,6 @@ jobs:
           curl --fail-with-body --silent --show-error \
             --request POST \
             --header "Authorization: Bearer ${OIDC_TOKEN}" \
+            --header "x-vercel-trusted-oidc-idp-token: ${OIDC_TOKEN}" \
             --header "Accept: application/json" \
             https://quant-pro-terminal-git-feature-mobile-signal-alerts-zlfmtn.vercel.app/api/push-dispatch

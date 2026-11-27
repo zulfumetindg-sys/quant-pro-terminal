@@ -3,6 +3,28 @@ const { backgroundPushConfigured, encodePushBody } = require("./push-utils");
 const { validateSignalIdentity } = require("../public/signal-notification-policy");
 const { verifyGithubOidcRequest } = require("./push-auth");
 
+async function readSignalEnginePayload(signalEngineHandler = require("./signal-engine")) {
+  let statusCode = 200;
+  let payload = null;
+  const response = {
+    setHeader() {},
+    status(code) {
+      statusCode = code;
+      return this;
+    },
+    json(value) {
+      payload = value;
+      return this;
+    }
+  };
+
+  await signalEngineHandler({ method: "GET" }, response);
+  if (statusCode !== 200 || !payload || !payload.ok || !payload.signal) {
+    throw new Error("SIGNAL_SOURCE_UNAVAILABLE");
+  }
+  return payload;
+}
+
 async function redis(command) {
   const response = await fetch(process.env.KV_REST_API_URL, {
     method: "POST",
@@ -35,22 +57,9 @@ module.exports = async function handler(req, res) {
       process.env.VAPID_PRIVATE_KEY
     );
 
-    const origin = process.env.VERCEL_URL
-      ? "https://" + process.env.VERCEL_URL
-      : process.env.VERCEL_PROJECT_PRODUCTION_URL
-        ? "https://" + process.env.VERCEL_PROJECT_PRODUCTION_URL
-        : null;
-    if (!origin) return res.status(503).json({ ok: false, error: "DEPLOYMENT_ORIGIN_UNAVAILABLE" });
-
-    const response = await fetch(origin + "/api/signal-engine", {
-      headers: { Accept: "application/json" },
-      cache: "no-store"
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload.ok || !payload.signal) {
-      return res.status(502).json({ ok: false, error: "SIGNAL_SOURCE_UNAVAILABLE" });
-    }
-
+    // Invoke the signal engine in-process. Fetching our own protected Preview URL
+    // would hit Vercel Deployment Protection again and return an SSO redirect.
+    const payload = await readSignalEnginePayload();
     const signal = payload.signal;
     const identity = validateSignalIdentity(signal, Date.now());
     if (!identity.valid) {
@@ -119,3 +128,5 @@ module.exports = async function handler(req, res) {
     return res.status(503).json({ ok: false, error: "PUSH_DISPATCH_FAILED" });
   }
 };
+
+module.exports.__test = { readSignalEnginePayload };
