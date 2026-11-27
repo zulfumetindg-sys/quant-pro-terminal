@@ -40,8 +40,8 @@ function validateSubscription(value) {
   }
   const keys = value.keys;
   if (!keys || typeof keys !== "object" ||
-      typeof keys.p256dh !== "string" || keys.p256dh.length < 20 || keys.p256dh.length > 256 ||
-      typeof keys.auth !== "string" || keys.auth.length < 8 || keys.auth.length > 128) {
+      typeof keys.p256dh !== "string" || !/^[A-Za-z0-9_-]+$/.test(keys.p256dh) || keys.p256dh.length < 20 || keys.p256dh.length > 256 ||
+      typeof keys.auth !== "string" || !/^[A-Za-z0-9_-]+$/.test(keys.auth) || keys.auth.length < 8 || keys.auth.length > 128) {
     return { valid: false, reason: "INVALID_PUSH_KEYS" };
   }
   return { valid: true };
