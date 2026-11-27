@@ -1278,6 +1278,30 @@ test("forward archive stores only post-start closed signals and deduplicates rep
   assert.equal(repeated.recordCount, 2);
 });
 
+test("forward archive reports profit factor and chronological drawdown separately for each slippage case", () => {
+  const storage = memoryStorage();
+  forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), storage);
+  const trades = [
+    sampleForwardTrade("2026-11-27T12:00:00.000Z", "2026-11-27T13:00:00.000Z", 2),
+    sampleForwardTrade("2026-11-27T13:00:00.000Z", "2026-11-27T14:00:00.000Z", -1),
+    sampleForwardTrade("2026-11-27T14:00:00.000Z", "2026-11-27T15:00:00.000Z", 0.5)
+  ];
+  const result = forwardArchive.capture(forwardPayload("2026-11-27T16:00:00.000Z", trades), storage);
+  assert.equal(result.ok, true);
+  for (const summary of result.summaries) {
+    assert.equal(summary.tradeCount, 3);
+    assert.equal(summary.wins, 2);
+    assert.equal(summary.losses, 1);
+    assert.equal(summary.breakEven, 0);
+    assert.equal(summary.profitFactor, 2.5);
+    assert.equal(summary.netR, 1.5);
+    assert.equal(summary.averageR, 0.5);
+    assert.equal(summary.maxDrawdownR, 1);
+    assert.equal(summary.winRatePercent, null);
+    assert.equal(summary.sampleStatus, "INSUFFICIENT_SAMPLE");
+  }
+});
+
 test("forward archive excludes signals before tracking even if they close afterward", () => {
   const storage = memoryStorage();
   forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), storage);
