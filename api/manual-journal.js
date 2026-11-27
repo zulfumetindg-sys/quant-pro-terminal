@@ -98,10 +98,16 @@ function calculateRealizedR(trade, exitPrice) {
 }
 
 function parseRedisState(raw) {
-  if (!raw) return { trades: [], activeTradeId: "" };
-  const state = typeof raw === "string" ? JSON.parse(raw) : raw;
-  if (!state || !Array.isArray(state.trades) || typeof state.activeTradeId !== "string") {
-    throw new Error("JOURNAL_STATE_INVALID");
+  if (raw == null || raw === "") return { trades: [], activeTradeId: "" };
+  let state;
+  try {
+    state = typeof raw === "string" ? JSON.parse(raw) : raw;
+  } catch {
+    throw storageError("JOURNAL_STATE_INVALID", "UPSTREAM_INVALID_RESPONSE");
+  }
+  if (!state || typeof state !== "object" || !Array.isArray(state.trades) ||
+      typeof state.activeTradeId !== "string") {
+    throw storageError("JOURNAL_STATE_INVALID", "UPSTREAM_INVALID_RESPONSE");
   }
   return state;
 }
@@ -268,7 +274,20 @@ async function mutate(action, args, env) {
     JOURNAL_KEY,
     ...buildMutationArguments(action, args)
   ], env, "MUTATE");
-  return typeof result === "string" ? JSON.parse(result) : result;
+  let parsed;
+  try {
+    parsed = typeof result === "string" ? JSON.parse(result) : result;
+  } catch {
+    throw storageError("JOURNAL_MUTATION_RESPONSE_INVALID", "UPSTREAM_INVALID_RESPONSE");
+  }
+  if (!parsed || typeof parsed !== "object" || typeof parsed.ok !== "boolean") {
+    throw storageError("JOURNAL_MUTATION_RESPONSE_INVALID", "UPSTREAM_INVALID_RESPONSE");
+  }
+  if (parsed.ok && (!parsed.state || !Array.isArray(parsed.state.trades) ||
+      typeof parsed.state.activeTradeId !== "string")) {
+    throw storageError("JOURNAL_MUTATION_RESPONSE_INVALID", "UPSTREAM_INVALID_RESPONSE");
+  }
+  return parsed;
 }
 
 module.exports = async function handler(req, res) {
