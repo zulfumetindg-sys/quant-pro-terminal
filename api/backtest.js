@@ -411,11 +411,14 @@ function hasPeriodContinuity(candles, periodStart, periodEnd, periodComplete, no
   }
 
   const lastClose = periodCandles[periodCandles.length - 1].time + 3600000;
-  if (!Number.isFinite(now) || now < lastClose || now - lastClose > maxGapMs) return false;
 
-  // For a finished period, require its final candle to reach the boundary
-  // within the same conservative weekend/holiday gap allowance.
-  if (periodComplete && periodEnd - lastClose > maxGapMs) return false;
+  // A completed historical period is judged against its own end boundary,
+  // never against today's clock. Only an ongoing period must have fresh data.
+  if (periodComplete) {
+    if (periodEnd - lastClose > maxGapMs) return false;
+  } else {
+    if (!Number.isFinite(now) || now < lastClose || now - lastClose > maxGapMs) return false;
+  }
 
   return true;
 }
