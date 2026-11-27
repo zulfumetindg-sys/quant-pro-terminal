@@ -415,7 +415,7 @@ test("incomplete historical period excludes an open trade instead of force-closi
   const h4 = backtest.makeH4(data);
   const indicators = backtest.buildIndicators(data);
   const period = { name: "INCOMPLETE_TEST", start: new Date(base + 400 * 3600000).toISOString(), end: new Date(base + 430 * 3600000).toISOString() };
-  const result = backtest.runBacktest(data, h4, indicators, 0.1, period);
+  const result = backtest.runBacktest(data, h4, indicators, 0.1, period, base + 430 * 3600000);
   assert.equal(result.periodComplete, false);
   assert.equal(result.periodStatus, "PERIOD_STILL_RUNNING");
   assert.equal(result.metrics.tradeCount, 0);
@@ -1073,6 +1073,25 @@ test("historical period is not scored when its candles contain a gap over 72 hou
   assert.equal(result.periodStatus, "PERIOD_DATA_GAP");
   assert.equal(result.continuityComplete, false);
   assert.equal(result.metrics, null);
+});
+
+test("incomplete historical period is not scored when its last candle is over 72 hours stale", () => {
+  const base = Date.UTC(2026, 0, 5, 0, 0, 0);
+  const data = Array.from({ length: 1000 }, (_, i) =>
+    candle(base + i * 3600000, 2300 + i * 0.03 + 2 * Math.sin(i / 9), 1)
+  );
+  const h4 = backtest.makeH4(data);
+  const indicators = backtest.buildIndicators(data);
+  const period = {
+    name: "STALE_INCOMPLETE",
+    start: new Date(base + 500 * 3600000).toISOString(),
+    end: new Date(base + 1100 * 3600000).toISOString()
+  };
+  const now = base + 1100 * 3600000;
+  const result = backtest.runBacktest(data, h4, indicators, 0.1, period, now);
+  assert.equal(result.periodStatus, "PERIOD_DATA_GAP");
+  assert.equal(result.metrics, null);
+  assert.equal(result.continuityComplete, false);
 });
 
 test("historical period is not scored without its own 400 H1 and 100 H4 warmup", () => {
