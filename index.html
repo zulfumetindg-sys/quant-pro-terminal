@@ -7,7 +7,7 @@
   <meta name="description" content="QUANT PRO yalnızca XAUUSD altın analiz ve sinyal terminali">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.8.2">
+  <link rel="stylesheet" href="styles.css?v=0.8.14">
   <title>QUANT PRO · XAUUSD</title>
 </head>
 <body>
@@ -60,6 +60,16 @@
         <button class="connect-btn" id="backtestBtn">Tarihsel geri testi çalıştır</button>
         <div id="backtestResults" class="backtest-results">Geri test isteğe bağlıdır. Çalıştırılması ek API kotası tüketebilir.</div>
       </div>
+      <div class="backtest-tools">
+        <button class="connect-btn" id="forwardTestBtn">Sabit başlangıçlı ileri testi kontrol et</button>
+        <div id="forwardTestResults" class="backtest-results">Sabit başlangıç tarihinden sonraki mumlar burada kontrol edilir. Bu işlem ek Twelve Data API kotası tüketir; yalnızca gerektiğinde çalıştır.</div>
+        <div class="journal-tools">
+          <button class="connect-btn" id="forwardArchiveExportBtn">İleri test yedeğini indir</button>
+          <label class="connect-btn" for="forwardArchiveImportFile">İleri test yedeğini geri yükle</label>
+          <input id="forwardArchiveImportFile" type="file" accept="application/json,.json" hidden>
+        </div>
+        <div id="forwardArchiveStatus" class="journal-status">İleri test arşivi manuel işlem günlüğünden ayrıdır.</div>
+      </div>
     </section>
 
     <section class="risk-panel" id="risk-panel">
@@ -68,17 +78,60 @@
         <span class="pill blue">ARAŞTIRMA</span>
       </div>
       <div class="risk-grid">
-        <div><span>Örnek hesap</span><strong>1.000 USD</strong></div>
-        <div><span>İşlem başı azami risk</span><strong>%0,5</strong></div>
+        <div><span>Hesap para birimi</span><strong>EUR</strong></div>
+        <div><span>Planlanan bakiye aralığı</span><strong>160–500 €</strong></div>
+        <div><span>İşlem başı azami risk</span><strong>%2,0</strong></div>
+        <div><span>160 € hesapta risk tavanı</span><strong>3,20 €</strong></div>
+        <div><span>300 € hesapta risk tavanı</span><strong>6,00 €</strong></div>
+        <div><span>500 € hesapta risk tavanı</span><strong>10,00 €</strong></div>
         <div><span>Minimum R:R</span><strong>1 : 1,8</strong></div>
         <div><span>Zaman dilimi</span><strong>H1 + H4</strong></div>
       </div>
-      <p class="risk-note">Başlangıç risk ayarlarıdır; emir gönderilmez. Lot hesabı ve gerçek piyasa maliyetleri doğrulanmamıştır; %0,5 yalnızca araştırma amaçlı risk referansıdır.</p>
+      <p class="risk-note">Risk tutarları planlama tavanıdır, işlem hedefi değildir. GOLDm# sözleşme/tick verisi, EUR dönüşümü ve anlık gidiş-dönüş maliyeti doğrulanmadan lot önerilmez. Minimum hacim risk tavanını aşıyorsa işlem engellenir. Bu panel emir göndermez; sistem RESEARCH_ONLY_NOT_TRADE_READY durumundadır.</p>
     </section>
 
-    <footer><span>QUANT PRO · v0.8.2 · XAUUSD ONLY</span><span>Yalnızca analiz · Otomatik emir yok · Trade-ready değil</span></footer>
+    <section class="journal-panel" id="manual-journal">
+      <div class="section-head compact">
+        <div><div class="eyebrow">MANUAL TRADE JOURNAL</div><h2>Manuel işlem kaydı</h2></div>
+        <span class="pill blue">XAUUSD · CİHAZDA KAYIT</span>
+      </div>
+      <p class="risk-note">Yalnızca MT5'te gerçekten açıp kapattığın işlemleri elle kaydeder. Emir göndermez. Kayıtlar bu cihazın tarayıcısında saklanır; cihaz değiştirirken yedek alıp geri yükle. Spread, komisyon ve swap dahil değildir.</p>
+      <div class="journal-grid">
+        <div class="journal-card">
+          <h3>Manuel açılış</h3>
+          <label for="journalSide">İşlem yönü</label>
+          <select id="journalSide"><option value="BUY">AL (BUY)</option><option value="SELL">SAT (SELL)</option></select>
+          <label for="journalFillPrice">MT5 gerçekleşen giriş fiyatı</label>
+          <input id="journalFillPrice" inputmode="decimal" type="number" min="0" step="0.01" placeholder="Örn. 2650.50">
+          <label for="journalStopLoss">Başlangıç stop loss</label>
+          <input id="journalStopLoss" inputmode="decimal" type="number" min="0" step="0.01" placeholder="Örn. 2640.50">
+          <label for="journalTakeProfit">Take profit</label>
+          <input id="journalTakeProfit" inputmode="decimal" type="number" min="0" step="0.01" placeholder="Örn. 2670.50">
+          <button class="connect-btn" id="journalOpenBtn">Açılışı kaydet</button>
+          <p>Tek seferde bir açık işlem tutulur. Kayıt için brüt R:R en az 1:1,8 olmalıdır.</p>
+        </div>
+        <div class="journal-card">
+          <h3>Manuel kapanış</h3>
+          <label for="journalExitPrice">MT5 gerçekleşen çıkış fiyatı</label>
+          <input id="journalExitPrice" inputmode="decimal" type="number" min="0" step="0.01" placeholder="Örn. 2670.50">
+          <button class="connect-btn" id="journalCloseBtn" disabled>Açık işlemi kapat ve kaydet</button>
+          <p>Sonuç R olarak hesaplanır; işlem maliyetleri dahil değildir.</p>
+        </div>
+      </div>
+      <div class="journal-tools">
+        <button class="connect-btn" id="journalExportBtn">Yedeği indir</button>
+        <label class="connect-btn" for="journalImportFile">Yedekten geri yükle</label>
+        <input id="journalImportFile" type="file" accept="application/json,.json" hidden>
+      </div>
+      <div id="journalStatus" class="journal-status">Veritabanı gerekmiyor.</div>
+      <div id="journalActive" class="journal-records">Henüz açık işlem yok.</div>
+      <div id="journalHistory" class="journal-records"></div>
+    </section>ion>
+
+    <footer><span>QUANT PRO · v0.8.20 · XAUUSD ONLY</span><span>Yalnızca analiz · Otomatik emir yok · Trade-ready değil</span></footer>
   </main>
 
-  <script src="app.js?v=0.8.2"></script>
+  <script src="forward-archive.js?v=0.8.20"></script>
+  <script src="app.js?v=0.8.20"></script>
 </body>
 </html>

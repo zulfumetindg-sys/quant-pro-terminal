@@ -1,4 +1,6 @@
 
+const { measureVolatilityShock } = require("./volatility");
+
 const SYMBOL = "XAU/USD";
 const MARKET = "XAUUSD";
 
@@ -51,6 +53,75 @@ function normalizeCandles(values) {
   }
 
   return [...byTime.values()].sort((a, b) => a.time - b.time);
+}
+
+function checkLatestCompletedH1Freshness(candles, now = Date.now(), maxAgeMs = 3600000) {
+  if (!Array.isArray(candles) || candles.length === 0) {
+    return { fresh: false, ageMs: null, reason: "H1_CANDLES_UNAVAILABLE" };
+  }
+  const last = candles[candles.length - 1];
+  const closedAt = Number(last.time) + 3600000;
+  const ageMs = now - closedAt;
+  if (!Number.isFinite(closedAt) || !Number.isFinite(ageMs) || ageMs < 0) {
+    return { fresh: false, ageMs: null, reason: "H1_CANDLE_CLOSE_TIME_INVALID" };
+  }
+  if (ageMs > maxAgeMs) {
+    return { fresh: false, ageMs, reason: "H1_CANDLES_STALE" };
+  }
+  return { fresh: true, ageMs, reason: null };
+}
+
+function checkRecentMarketDataContinuity(candles, h4Candles) {
+  const requiredH1 = 400;
+  const requiredH4 = 100;
+  const maxGapMs = 72 * 3600000;
+
+  if (!Array.isArray(candles) || candles.length < requiredH1) {
+    return { continuous: false, reason: "H1_HISTORY_INSUFFICIENT", requiredH1, availableH1: Array.isArray(candles) ? candles.length : 0 };
+  }
+  if (!Array.isArray(h4Candles) || h4Candles.length < requiredH4) {
+    return { continuous: false, reason: "H4_HISTORY_INSUFFICIENT", requiredH4, availableH4: Array.isArray(h4Candles) ? h4Candles.length : 0 };
+  }
+
+  const recentH1 = candles.slice(-requiredH1);
+  for (let i = 1; i < recentH1.length; i++) {
+    if (recentH1[i].time - recentH1[i - 1].time > maxGapMs) {
+      return { continuous: false, reason: "H1_GAP_OVER_72H", requiredH1, availableH1: recentH1.length };
+    }
+  }
+
+  const recentH4 = h4Candles.slice(-requiredH4);
+  for (let i = 1; i < recentH4.length; i++) {
+    if (recentH4[i].time - recentH4[i - 1].time > maxGapMs) {
+      return { continuous: false, reason: "H4_GAP_OVER_72H", requiredH4, availableH4: recentH4.length };
+    }
+  }
+
+  const lastH1Close = recentH1[recentH1.length - 1].time + 3600000;
+  const latestH4 = recentH4[recentH4.length - 1];
+  const lastH4Close = Number.isFinite(latestH4.end)
+    ? latestH4.end
+    : latestH4.time + 14400000;
+  const h4LagMs = lastH1Close - lastH4Close;
+  if (!Number.isFinite(h4LagMs) || h4LagMs < 0 || h4LagMs >= 4 * 3600000) {
+    return {
+      continuous: false,
+      reason: "LATEST_H4_STALE_OR_INCOMPLETE",
+      latestH1Close: new Date(lastH1Close).toISOString(),
+      latestH4Close: Number.isFinite(lastH4Close) ? new Date(lastH4Close).toISOString() : null,
+      h4LagHours: Number.isFinite(h4LagMs) ? +(h4LagMs / 3600000).toFixed(2) : null
+    };
+  }
+
+  return {
+    continuous: true,
+    requiredH1,
+    availableH1: recentH1.length,
+    requiredH4,
+    availableH4: recentH4.length,
+    h4LagHours: +(h4LagMs / 3600000).toFixed(2),
+    maximumAllowedGapHours: 72
+  };
 }
 
 function emaSeries(values, period) {
@@ -217,9 +288,15 @@ function createSignal(candles, h4Candles, currentPrice) {
   const h1 = analyzeTrend(candles, 20, 50);
   const h4 = analyzeTrend(h4Candles, 8, 20);
 
+  const volatilityShock = measureVolatilityShock(candles);
   const base = {
+    volatilityShock,
     executionStatus: "RESEARCH_ONLY_NOT_TRADE_READY",
-    maxRiskPercent: 0.5,
+    maxRiskPercent: 2,
+    accountCurrency: "EUR",
+    accountBalanceScenariosEUR: [160, 300, 500],
+    riskBudgetScenariosEUR: [3.2, 6, 10],
+    riskSizingStatus: "PLANNING_ONLY_BROKER_SPEC_AND_COSTS_UNVERIFIED",
     historicalWinProbability: "UNAVAILABLE",
     backtestStatus: "NOT_INDEPENDENTLY_VALIDATED",
     timeframe: "H1 + COMPLETED H4",
@@ -252,7 +329,7 @@ function createSignal(candles, h4Candles, currentPrice) {
 
   const entryFields = {
     entry: currentPrice,
-    entryReference: "LATEST_PROVIDER_PRICE_ESTIMATE",
+    entryReference: "TWELVE_DATA_LAST_1MIN_CANDLE_CLOSE",
     signalReference: "LAST_COMPLETED_H1_CLOSE",
     entryDistancePercent: Number(distance.toFixed(4))
   };
@@ -325,22 +402,30 @@ function createSignal(candles, h4Candles, currentPrice) {
     ? currentPrice + reward
     : currentPrice - reward;
 
+  const signalCandleTime = candles[candles.length - 1].time + 3600000;
+  const signalCandleClosedAt = new Date(signalCandleTime).toISOString();
+  const signalId = `XAUUSD:${side}:${signalCandleTime}`;
+
   return {
     ...base,
     ...entryFields,
     status: side,
+    signalId,
+    signalCandleClosedAt,
+    signalValidUntil: new Date(signalCandleTime + 3600000).toISOString(),
     h1Trend: h1.trend,
     h4Trend: h4.trend,
     macdHistogram: Number(histogram.toFixed(5)),
     macdFilter: "12/26/9 HISTOGRAM DIRECTION",
     atr: Number(atr.toFixed(3)),
+    volatilityShock,
     stopATR: STOP_ATR,
     sl: Number(sl.toFixed(3)),
     tp: Number(tp.toFixed(3)),
     riskReward: "1:2.0",
     riskRewardBasis: "GROSS_BEFORE_SPREAD_SLIPPAGE_AND_COMMISSION",
     entryModelWarning:
-      "Giriş, Twelve Data son fiyatının yaklaşık tahminidir; bid/ask, spread ve kayma dahil değildir. Mesafe, son tamamlanmış H1 kapanışına göredir."
+      "Giriş, Twelve Data quote yanıtındaki son 1 dakikalık mumun close fiyatıdır; gerçek zamanlı tick veya işlem yapılabilir bid/ask değildir. Spread, kayma ve komisyon dahil değildir. Mesafe, son tamamlanmış H1 kapanışına göredir."
   };
 }
 
@@ -356,7 +441,7 @@ async function getLatestQuote(key) {
   const body = await response.json();
   const price = Number(body.close);
   // `timestamp` is the interval candle's opening time, not the latest quote update.
-  // Require the dedicated last_quote_at field; never fall back to candle timestamp.
+  // Twelve Data defines last_quote_at as the last 1-minute candle timestamp; it is not an exchange tick timestamp.
   const quoteTimestamp = Number(body.last_quote_at);
 
   if (!response.ok || body.status === "error" ||
@@ -382,8 +467,10 @@ async function getLatestQuote(key) {
     price,
     timestamp: new Date(quoteTimestamp * 1000).toISOString(),
     ageSeconds: Math.floor(ageMs / 1000),
-    freshness: "VERIFIED_WITHIN_180_SECONDS",
-    source: "TWELVE_DATA_QUOTE_1MIN"
+    freshness: "LAST_1MIN_CANDLE_TIMESTAMP_VERIFIED_WITHIN_180_SECONDS",
+    timestampType: "LAST_1MIN_CANDLE",
+    priceType: "ONE_MINUTE_CANDLE_CLOSE",
+    source: "TWELVE_DATA_QUOTE_1MIN_CANDLE"
   };
 }
 
@@ -458,14 +545,17 @@ module.exports = async function handler(req, res) {
     const candles = normalizeCandles(values);
     const h4Candles = aggregateH4(candles);
 
-    if (candles.length < 60 || h4Candles.length < 20) {
+    if (candles.length < 400 || h4Candles.length < 100) {
       return res.status(422).json({
         ok: false,
         error: "INSUFFICIENT_COMPLETED_CANDLES",
         candleCount: candles.length,
-        h4CandleCount: h4Candles.length
+        h4CandleCount: h4Candles.length,
+        required: { completedH1: 400, completedH4: 100 }
       });
     }
+
+    const marketDataContinuity = checkRecentMarketDataContinuity(candles, h4Candles);
 
     let quote;
 
@@ -480,11 +570,19 @@ module.exports = async function handler(req, res) {
       };
     }
 
-    const signal = createSignal(
-      candles,
-      h4Candles,
-      quote.status === "ok" ? quote.price : null
-    );
+    const h1CandleFreshness = checkLatestCompletedH1Freshness(candles);
+    const signal = marketDataContinuity.continuous && h1CandleFreshness.fresh
+      ? createSignal(candles, h4Candles, quote.status === "ok" ? quote.price : null)
+      : {
+          ...createSignal(candles, h4Candles, null),
+          reason: !marketDataContinuity.continuous
+            ? marketDataContinuity.reason
+            : h1CandleFreshness.reason,
+          marketDataContinuity,
+          h1CandleAgeSeconds: h1CandleFreshness.ageMs === null
+            ? null
+            : Math.floor(h1CandleFreshness.ageMs / 1000)
+        };
 
     const payload = {
       ok: true,
@@ -510,6 +608,14 @@ module.exports = async function handler(req, res) {
         adxFilter: false
       },
       quote,
+      marketDataContinuity,
+      h1CandleFreshness: {
+        ...h1CandleFreshness,
+        ageSeconds: h1CandleFreshness.ageMs === null
+          ? null
+          : Math.floor(h1CandleFreshness.ageMs / 1000),
+        maxAgeSeconds: 3600
+      },
       h1: analyzeTrend(candles, 20, 50),
       h4: analyzeTrend(h4Candles, 8, 20),
       signal,
@@ -533,4 +639,4 @@ module.exports = async function handler(req, res) {
 
 
 // Export pure functions for deterministic automated tests. The default export remains the Vercel handler.
-module.exports.__test = { parseTime, normalizeCandles, emaSeries, ema, aggregateH4, calculateMACDHistogram, calculateATR, analyzeTrend, createSignal, getLatestQuote };
+module.exports.__test = { parseTime, normalizeCandles, checkLatestCompletedH1Freshness, checkRecentMarketDataContinuity, emaSeries, ema, aggregateH4, calculateMACDHistogram, calculateATR, analyzeTrend, createSignal, getLatestQuote };

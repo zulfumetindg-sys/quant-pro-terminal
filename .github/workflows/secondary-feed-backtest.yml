@@ -1,0 +1,28 @@
+name: QUANT PRO long-history secondary-feed validation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  secondary-feed-backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Download secondary XAUUSD H1 history
+        run: curl --fail --location --silent --show-error https://raw.githubusercontent.com/sepaulresearch/market-datasets/main/data/xauusd/xauusd_raw_spread_h1.csv --output /tmp/sepaul_xauusd_h1.csv
+      - name: Run exact QUANT PRO engine on segmented long history
+        run: REPORT_OUTPUT=/tmp/quant-pro-long-history-report.json node scripts/run-secondary-feed-backtest.js /tmp/sepaul_xauusd_h1.csv
+      - name: Upload machine-readable long-history report
+        uses: actions/upload-artifact@v4
+        with:
+          name: quant-pro-xauusd-long-history-report
+          path: /tmp/quant-pro-long-history-report.json
+          if-no-files-found: error
+          retention-days: 30

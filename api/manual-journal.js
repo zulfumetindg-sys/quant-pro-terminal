@@ -1,0 +1,383 @@
+const crypto = require("node:crypto");
+
+const JOURNAL_KEY = "quant-pro:xauusd:manual-journal:v1";
+const MAX_TRADES = 500;
+
+function safeEqual(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+function validateOpenPayload(body, now = Date.now()) {
+  const signal = body && body.signal;
+  if (!signal || typeof signal !== "object") return { ok: false, error: "SIGNAL_REQUIRED" };
+  if (signal.symbol !== "XAUUSD" && signal.symbol !== "XAU/USD") return { ok: false, error: "XAUUSD_ONLY" };
+  if (signal.status !== "BUY" && signal.status !== "SELL") return { ok: false, error: "LIVE_BUY_OR_SELL_REQUIRED" };
+  if (typeof signal.signalId !== "string" || !/^[A-Za-z0-9:_-]{8,160}$/.test(signal.signalId)) {
+    return { ok: false, error: "SIGNAL_ID_INVALID" };
+  }
+  const idMatch = /^XAUUSD:(BUY|SELL):(\d{13})$/.exec(signal.signalId);
+  if (!idMatch || idMatch[1] !== signal.status) return { ok: false, error: "SIGNAL_ID_INVALID" };
+  const candleClosedAt = Date.parse(signal.signalCandleClosedAt || "");
+  const expiry = Date.parse(signal.signalValidUntil || "");
+  const idTime = Number(idMatch[2]);
+  if (
+    !Number.isFinite(candleClosedAt) ||
+    candleClosedAt !== idTime ||
+    expiry !== candleClosedAt + 3600000 ||
+    candleClosedAt > now ||
+    expiry <= now
+  ) return { ok: false, error: "SIGNAL_EXPIRED_OR_INVALID" };
+
+  const signalEntry = Number(signal.entry);
+  const fillPrice = Number(body.fillPrice);
+  const stopLoss = Number(signal.sl);
+  const takeProfit = Number(signal.tp);
+  if (![signalEntry, fillPrice, stopLoss, takeProfit].every(Number.isFinite) ||
+      signalEntry <= 0 || fillPrice <= 0 || stopLoss <= 0 || takeProfit <= 0) {
+    return { ok: false, error: "PRICE_FIELDS_INVALID" };
+  }
+
+  const side = signal.status;
+  const correctGeometry = side === "BUY"
+    ? stopLoss < fillPrice && takeProfit > fillPrice
+    : stopLoss > fillPrice && takeProfit < fillPrice;
+  if (!correctGeometry) return { ok: false, error: "FILL_PRICE_OUTSIDE_RISK_LEVELS" };
+
+  const fillDistancePercent = Math.abs(fillPrice - signalEntry) / signalEntry * 100;
+  if (!Number.isFinite(fillDistancePercent) || fillDistancePercent > 0.10) {
+    return { ok: false, error: "ACTUAL_FILL_TOO_FAR_FROM_SIGNAL", fillDistancePercent: Number.isFinite(fillDistancePercent) ? +fillDistancePercent.toFixed(4) : null };
+  }
+
+  const risk = Math.abs(fillPrice - stopLoss);
+  const reward = Math.abs(takeProfit - fillPrice);
+  const rr = reward / risk;
+  if (!Number.isFinite(rr) || rr < 1.8) {
+    return { ok: false, error: "ACTUAL_FILL_RR_BELOW_1_8", actualRiskReward: Number.isFinite(rr) ? +rr.toFixed(3) : null };
+  }
+
+  return {
+    ok: true,
+    trade: {
+      tradeId: crypto.randomUUID(),
+      signalId: signal.signalId,
+      symbol: "XAUUSD",
+      side,
+      signalEntry,
+      fillPrice,
+      stopLoss,
+      takeProfit,
+      actualFillRiskReward: +rr.toFixed(3),
+      actualFillDistancePercent: +fillDistancePercent.toFixed(4),
+      openedAt: new Date(now).toISOString(),
+      status: "OPEN",
+      costs: "NOT_INCLUDED",
+      note: "Manuel MT5 gerçekleşme fiyatı; spread/komisyon/swap ayrıca girilmedi."
+    }
+  };
+}
+
+function validateClosePayload(body, now = Date.now()) {
+  const tradeId = body && body.tradeId;
+  const exitPrice = Number(body && body.exitPrice);
+  if (typeof tradeId !== "string" || !/^[0-9a-f-]{36}$/i.test(tradeId)) {
+    return { ok: false, error: "TRADE_ID_INVALID" };
+  }
+  if (!Number.isFinite(exitPrice) || exitPrice <= 0) return { ok: false, error: "EXIT_PRICE_INVALID" };
+  return { ok: true, tradeId, exitPrice, closedAt: new Date(now).toISOString() };
+}
+
+function calculateRealizedR(trade, exitPrice) {
+  const risk = Math.abs(trade.fillPrice - trade.stopLoss);
+  const pnl = trade.side === "BUY"
+    ? exitPrice - trade.fillPrice
+    : trade.fillPrice - exitPrice;
+  return risk > 0 ? +(pnl / risk).toFixed(4) : null;
+}
+
+function parseRedisState(raw) {
+  if (raw == null) return { trades: [], activeTradeId: "" };
+  let state;
+  try {
+    state = typeof raw === "string" ? JSON.parse(raw) : raw;
+  } catch {
+    throw storageError("JOURNAL_STATE_INVALID", "UPSTREAM_INVALID_RESPONSE");
+  }
+  const invalid = () => {
+    throw storageError("JOURNAL_STATE_INVALID", "UPSTREAM_INVALID_RESPONSE");
+  };
+  if (!state || typeof state !== "object" || Array.isArray(state) ||
+      !Array.isArray(state.trades) || state.trades.length > MAX_TRADES ||
+      typeof state.activeTradeId !== "string") invalid();
+
+  const ids = new Set();
+  let openCount = 0;
+  for (const trade of state.trades) {
+    if (!trade || typeof trade !== "object" || Array.isArray(trade) ||
+        typeof trade.tradeId !== "string" || !/^[0-9a-f-]{36}$/i.test(trade.tradeId) ||
+        ids.has(trade.tradeId) ||
+        typeof trade.signalId !== "string" ||
+        trade.symbol !== "XAUUSD" ||
+        !["BUY", "SELL"].includes(trade.side) ||
+        !["OPEN", "CLOSED"].includes(trade.status) ||
+        ![trade.fillPrice, trade.stopLoss, trade.takeProfit].every(value =>
+          typeof value === "number" && Number.isFinite(value) && value > 0)) invalid();
+    ids.add(trade.tradeId);
+    if (trade.status === "OPEN") openCount++;
+  }
+  if (openCount > 1) invalid();
+  if (state.activeTradeId === "") {
+    if (openCount !== 0) invalid();
+  } else {
+    const active = state.trades.find(trade => trade.tradeId === state.activeTradeId);
+    if (!active || active.status !== "OPEN" || openCount !== 1) invalid();
+  }
+  return state;
+}
+
+function storageError(message, diagnosticCode) {
+  const error = new Error(message);
+  error.diagnosticCode = diagnosticCode;
+  return error;
+}
+
+function providerErrorCategory(message) {
+  const value = String(message || "").toLowerCase();
+  if (/unauthorized|invalid.*token|wrongpass|noauth|authentication/.test(value)) return "AUTH";
+  if (/unknown command|unsupported command|syntax error|wrong number of arguments/.test(value)) return "COMMAND";
+  if (/rate limit|too many requests|quota/.test(value)) return "RATE_LIMIT";
+  if (/timeout|timed out/.test(value)) return "TIMEOUT";
+  return "PROVIDER_ERROR";
+}
+
+async function redisCommand(path, method, body, env, operation) {
+  const base = String(env.KV_REST_API_URL || "").replace(/\/+$/, "");
+  const token = env.KV_REST_API_TOKEN;
+  if (!base || !token) throw new Error("JOURNAL_STORAGE_NOT_CONFIGURED");
+
+  let response;
+  try {
+    response = await fetch(base + path, {
+      method,
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "application/json"
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(10000)
+    });
+  } catch (error) {
+    const code = error && (error.name === "TimeoutError" || error.name === "AbortError")
+      ? "TIMEOUT"
+      : "NETWORK";
+    console.error("[manual-journal] Redis request failed", { operation, code });
+    throw storageError("JOURNAL_STORAGE_UNAVAILABLE", code === "TIMEOUT" ? "UPSTREAM_TIMEOUT" : "UPSTREAM_NETWORK");
+  }
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    console.error("[manual-journal] Redis returned non-JSON response", {
+      operation,
+      httpStatus: response.status
+    });
+    throw storageError("JOURNAL_STORAGE_UNAVAILABLE", "UPSTREAM_INVALID_RESPONSE");
+  }
+
+  if (!response.ok) {
+    const category = providerErrorCategory(payload && payload.error);
+    console.error("[manual-journal] Redis HTTP error", {
+      operation,
+      httpStatus: response.status,
+      providerCategory: category
+    });
+    throw storageError("JOURNAL_STORAGE_UNAVAILABLE", "UPSTREAM_" + category);
+  }
+  if (payload && payload.error) {
+    const category = providerErrorCategory(payload.error);
+    console.error("[manual-journal] Redis command error", {
+      operation,
+      providerCategory: category
+    });
+    throw storageError("JOURNAL_STORAGE_COMMAND_FAILED", "UPSTREAM_COMMAND_" + category);
+  }
+  if (!payload || typeof payload !== "object" ||
+      !Object.prototype.hasOwnProperty.call(payload, "result")) {
+    console.error("[manual-journal] Redis response missing result field", {
+      operation,
+      httpStatus: response.status
+    });
+    throw storageError("JOURNAL_STORAGE_UNAVAILABLE", "UPSTREAM_INVALID_RESPONSE");
+  }
+  return payload.result;
+}
+
+const MUTATE_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+local state
+if raw then
+  state = cjson.decode(raw)
+else
+  state = { trades = {}, activeTradeId = '' }
+end
+local action = ARGV[1]
+if action == 'open' then
+  if state.activeTradeId ~= '' then
+    return cjson.encode({ ok = false, error = 'ACTIVE_TRADE_EXISTS' })
+  end
+  local incoming = cjson.decode(ARGV[2])
+  for _, trade in ipairs(state.trades) do
+    if trade.signalId == incoming.signalId then
+      return cjson.encode({ ok = false, error = 'SIGNAL_ALREADY_RECORDED' })
+    end
+  end
+  table.insert(state.trades, incoming)
+  state.activeTradeId = incoming.tradeId
+elseif action == 'close' then
+  if state.activeTradeId == '' then
+    return cjson.encode({ ok = false, error = 'NO_ACTIVE_TRADE' })
+  end
+  if state.activeTradeId ~= ARGV[4] then
+    return cjson.encode({ ok = false, error = 'TRADE_ID_NOT_ACTIVE' })
+  end
+  local found = false
+  for _, trade in ipairs(state.trades) do
+    if trade.tradeId == state.activeTradeId and trade.status == 'OPEN' then
+      local exitPrice = tonumber(ARGV[2])
+      local risk = math.abs(tonumber(trade.fillPrice) - tonumber(trade.stopLoss))
+      local pnl
+      if trade.side == 'BUY' then
+        pnl = exitPrice - tonumber(trade.fillPrice)
+      else
+        pnl = tonumber(trade.fillPrice) - exitPrice
+      end
+      trade.exitPrice = exitPrice
+      trade.closedAt = ARGV[3]
+      local rawR = risk > 0 and pnl / risk or nil
+      trade.realizedR = rawR and (rawR >= 0 and math.floor(rawR * 10000 + 0.5) / 10000 or math.ceil(rawR * 10000 - 0.5) / 10000) or cjson.null
+      trade.status = 'CLOSED'
+      found = true
+      break
+    end
+  end
+  if not found then
+    return cjson.encode({ ok = false, error = 'ACTIVE_TRADE_STATE_MISMATCH' })
+  end
+  state.activeTradeId = ''
+else
+  return cjson.encode({ ok = false, error = 'ACTION_INVALID' })
+end
+while #state.trades > tonumber(ARGV[5]) do
+  if state.trades[1].status == 'OPEN' then break end
+  table.remove(state.trades, 1)
+end
+redis.call('SET', KEYS[1], cjson.encode(state))
+return cjson.encode({ ok = true, state = state })
+`;
+
+async function getState(env) {
+  const raw = await redisCommand("/get/" + encodeURIComponent(JOURNAL_KEY), "GET", undefined, env, "GET_STATE");
+  return parseRedisState(raw);
+}
+
+function buildMutationArguments(action, args) {
+  if (action === "open") return [action, args[0], "", "", String(MAX_TRADES)];
+  if (action === "close") return [action, ...args, String(MAX_TRADES)];
+  throw new Error("ACTION_INVALID");
+}
+
+async function mutate(action, args, env) {
+  // Upstash REST accepts the complete Redis command as a JSON array at the
+  // database root. The command name must be the first array element.
+  const result = await redisCommand("", "POST", [
+    "EVAL",
+    MUTATE_SCRIPT,
+    "1",
+    JOURNAL_KEY,
+    ...buildMutationArguments(action, args)
+  ], env, "MUTATE");
+  let parsed;
+  try {
+    parsed = typeof result === "string" ? JSON.parse(result) : result;
+  } catch {
+    throw storageError("JOURNAL_MUTATION_RESPONSE_INVALID", "UPSTREAM_INVALID_RESPONSE");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) ||
+      typeof parsed.ok !== "boolean") {
+    throw storageError("JOURNAL_MUTATION_RESPONSE_INVALID", "UPSTREAM_INVALID_RESPONSE");
+  }
+  if (parsed.ok) {
+    try {
+      parseRedisState(parsed.state);
+    } catch {
+      throw storageError("JOURNAL_MUTATION_RESPONSE_INVALID", "UPSTREAM_INVALID_RESPONSE");
+    }
+  } else if (typeof parsed.error !== "string" || !/^[A-Z0-9_]{3,80}$/.test(parsed.error)) {
+    throw storageError("JOURNAL_MUTATION_RESPONSE_INVALID", "UPSTREAM_INVALID_RESPONSE");
+  }
+  return parsed;
+}
+
+module.exports = async function handler(req, res) {
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Vary", "Authorization");
+
+  if (req.method !== "GET" && req.method !== "POST") {
+    return res.status(405).json({ ok: false, error: "METHOD_NOT_ALLOWED" });
+  }
+
+  const expected = process.env.JOURNAL_ACCESS_TOKEN;
+  const supplied = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  if (!expected || Buffer.byteLength(expected) < 32 || !safeEqual(supplied, expected)) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  try {
+    if (req.method === "GET") {
+      const state = await getState(process.env);
+      return res.status(200).json({ ok: true, state });
+    }
+
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    if (body.action === "open") {
+      const validated = validateOpenPayload(body);
+      if (!validated.ok) return res.status(400).json(validated);
+      const result = await mutate("open", [JSON.stringify(validated.trade)], process.env);
+      return res.status(result.ok ? 200 : 409).json(result);
+    }
+    if (body.action === "close") {
+      const validated = validateClosePayload(body);
+      if (!validated.ok) return res.status(400).json(validated);
+      const result = await mutate("close", [
+        String(validated.exitPrice),
+        validated.closedAt,
+        validated.tradeId
+      ], process.env);
+      return res.status(result.ok ? 200 : 409).json(result);
+    }
+    return res.status(400).json({ ok: false, error: "ACTION_INVALID" });
+  } catch (error) {
+    const status = error.message === "JOURNAL_STORAGE_NOT_CONFIGURED" ? 503 : 502;
+    return res.status(status).json({
+      ok: false,
+      error: error.message === "JOURNAL_STORAGE_NOT_CONFIGURED"
+        ? "JOURNAL_STORAGE_NOT_CONFIGURED"
+        : "JOURNAL_SERVICE_UNAVAILABLE",
+      ...(error.diagnosticCode ? { diagnosticCode: error.diagnosticCode } : {})
+    });
+  }
+};
+
+module.exports.__test = {
+  safeEqual,
+  validateOpenPayload,
+  validateClosePayload,
+  calculateRealizedR,
+  parseRedisState,
+  buildMutationArguments,
+  providerErrorCategory
+};
