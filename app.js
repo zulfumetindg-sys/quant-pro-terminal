@@ -88,6 +88,67 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
   }
 }
 
+
+const SIGNAL_NOTIFICATION_KEY = "quantProLastNotifiedSignalV1";
+function setSignalNotificationStatus(message, bad = false) {
+  const status = $("signalNotificationStatus");
+  if (!status) return;
+  status.textContent = message;
+  status.className = "journal-status" + (bad ? " bad" : " ok");
+}
+async function enableSignalNotifications() {
+  if (!("Notification" in window)) {
+    setSignalNotificationStatus("Bu tarayıcı bildirimleri desteklemiyor.", true);
+    return;
+  }
+  if (!("serviceWorker" in navigator)) {
+    setSignalNotificationStatus("Bildirim için servis çalışanı desteklenmiyor. Android Chrome üzerinden tekrar dene.", true);
+    return;
+  }
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      setSignalNotificationStatus(permission === "denied"
+        ? "Bildirim izni reddedildi. Telefonun site izinlerinden açabilirsin."
+        : "Bildirim izni verilmedi.", true);
+      return;
+    }
+    await navigator.serviceWorker.ready;
+    if (latestSignal && (latestSignal.status === "BUY" || latestSignal.status === "SELL") && latestSignal.signalId) {
+      localStorage.setItem(SIGNAL_NOTIFICATION_KEY, latestSignal.signalId);
+    }
+    $("signalNotificationBtn").textContent = "Bildirimler açık";
+    setSignalNotificationStatus("Bildirim izni açık. Mevcut sinyal başlangıç noktası olarak kaydedildi; bundan sonra yeni ve geçerli AL/SAT sinyali geldiğinde bildirim gösterilecek.");
+  } catch (error) {
+    setSignalNotificationStatus("Bildirim kurulamadı: " + error.message, true);
+  }
+}
+async function notifyNewSignal(signal) {
+  if (!signal || !("Notification" in window) || Notification.permission !== "granted" ||
+      !("serviceWorker" in navigator) || !window.QuantSignalNotifications) return;
+  try {
+    const previousId = localStorage.getItem(SIGNAL_NOTIFICATION_KEY);
+    const decision = window.QuantSignalNotifications.evaluate(signal, previousId, Date.now());
+    if (!decision.notify) {
+      if (decision.nextId) localStorage.setItem(SIGNAL_NOTIFICATION_KEY, decision.nextId);
+      return;
+    }
+    const registration = await navigator.serviceWorker.ready;
+    const sideLabel = signal.status === "BUY" ? "AL" : "SAT";
+    await registration.showNotification("QUANT PRO · XAUUSD " + sideLabel, {
+      body: "Yeni H1 + tamamlanmış H4 sinyali. Giriş: " + (signal.entry ?? "—") +
+        " · SL: " + (signal.sl ?? "—") + " · TP: " + (signal.tp ?? "—"),
+      tag: "quant-pro-" + signal.signalId,
+      renotify: false,
+      data: { url: "./" }
+    });
+    localStorage.setItem(SIGNAL_NOTIFICATION_KEY, decision.nextId);
+    setSignalNotificationStatus("Yeni " + sideLabel + " sinyali için bildirim gönderildi. Fiyat ve koşulları panelden yeniden doğrula.");
+  } catch (error) {
+    setSignalNotificationStatus("Sinyal bildirimi gönderilemedi: " + error.message, true);
+  }
+}
+
 async function loadSignal(force = false) {
   const now = Date.now();
   const remaining = MIN_REFRESH_MS - (now - lastSignalRequestAt);
@@ -110,6 +171,7 @@ async function loadSignal(force = false) {
     }
 
     latestSignal = payload.signal || null;
+    notifyNewSignal(latestSignal);
     renderSignal(latestSignal);
     renderManualJournal();
     const online = payload.quote && payload.quote.status === "ok";
@@ -439,6 +501,7 @@ renderManualJournal();
 $("journalStatus").textContent = "Veritabanı gerekmiyor · kayıtlar bu cihazın tarayıcısında tutulur.";
 
 $("refreshBtn").addEventListener("click", () => loadSignal());
+$("signalNotificationBtn").addEventListener("click", enableSignalNotifications);
 $("backtestBtn").addEventListener("click", loadBacktest);
 function exportForwardArchive() {
   const data = window.QuantForwardArchive && window.QuantForwardArchive.exportBackup(window.localStorage);
