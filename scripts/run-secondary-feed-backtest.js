@@ -195,6 +195,44 @@ function summarize(trades) {
       SELL: group(matched.filter(t => t.side === "SELL"))
     }];
   }));
+  const trendBuckets = [
+    { label: "WEAK_LT_0_15", min: 0, max: 0.15 },
+    { label: "MODERATE_0_15_TO_0_35", min: 0.15, max: 0.35 },
+    { label: "STRONG_GTE_0_35", min: 0.35, max: Infinity }
+  ];
+  const byH1TrendStrength = Object.fromEntries(trendBuckets.map(bucket => {
+    const matched = ordered.filter(t => {
+      const value = t?.trendDiagnostics?.h1EmaSpreadAtr;
+      return Number.isFinite(value) && value >= bucket.min && value < bucket.max;
+    });
+    return [bucket.label, {
+      ...group(matched),
+      BUY: group(matched.filter(t => t.side === "BUY")),
+      SELL: group(matched.filter(t => t.side === "SELL"))
+    }];
+  }));
+  const byH4TrendStrength = Object.fromEntries(trendBuckets.map(bucket => {
+    const matched = ordered.filter(t => {
+      const value = t?.trendDiagnostics?.h4EmaSpreadPercent;
+      return Number.isFinite(value) && value >= bucket.min && value < bucket.max;
+    });
+    return [bucket.label, {
+      ...group(matched),
+      BUY: group(matched.filter(t => t.side === "BUY")),
+      SELL: group(matched.filter(t => t.side === "SELL"))
+    }];
+  }));
+  const byMomentumStrength = Object.fromEntries(trendBuckets.map(bucket => {
+    const matched = ordered.filter(t => {
+      const value = t?.trendDiagnostics?.macdHistogramAtr;
+      return Number.isFinite(value) && value >= bucket.min && value < bucket.max;
+    });
+    return [bucket.label, {
+      ...group(matched),
+      BUY: group(matched.filter(t => t.side === "BUY")),
+      SELL: group(matched.filter(t => t.side === "SELL"))
+    }];
+  }));
   const byEntryYearAndVolatilityRegime = {};
   for (const trade of ordered) {
     const ratio = trade?.volatilityShock?.ratio;
@@ -238,6 +276,10 @@ function summarize(trades) {
     byEntryHourUTCAndSide: summarizeMap(byEntryHourUTCAndSide),
     byVolatilityRegime,
     byEntryYearAndVolatilityRegime: byEntryYearAndVolatilityRegimeSummary,
+    byH1TrendStrength,
+    byH4TrendStrength,
+    byMomentumStrength,
+    trendStrengthInterpretation: "EXPLORATORY_DESCRIPTIVE_BINS_NOT_VALIDATED_FILTERS",
     volatilityRegimeInterpretation: "EXPLORATORY_DESCRIPTIVE_BINS_NOT_VALIDATED_FILTERS"
   };
 }
