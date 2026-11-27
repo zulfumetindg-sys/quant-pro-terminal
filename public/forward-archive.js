@@ -72,8 +72,12 @@
     }
 
     const observedAt = new Date(payload.generatedAt).toISOString();
-    let archive = safeParse(storage.getItem(STORAGE_KEY));
+    const storedValue = storage.getItem(STORAGE_KEY);
+    let archive = safeParse(storedValue);
     let started = false;
+    if (storedValue !== null && archive === null) {
+      return { ok: false, error: "LOCAL_ARCHIVE_INVALID" };
+    }
 
     if (archive === null) {
       archive = {
@@ -87,9 +91,12 @@
       started = true;
     } else if (
       archive.schemaVersion !== 1 ||
-      !Array.isArray(archive.records) ||
-      !Array.isArray(archive.conflicts) ||
-      !Number.isFinite(Date.parse(archive.trackingStartedAt))
+      archive.symbol !== "XAUUSD" ||
+      !Number.isFinite(Date.parse(archive.trackingStartedAt)) ||
+      !Array.isArray(archive.records) || archive.records.length > MAX_RECORDS ||
+      !archive.records.every(validRecord) ||
+      !Array.isArray(archive.conflicts) || archive.conflicts.length > 100 ||
+      !archive.conflicts.every(validConflict)
     ) {
       return { ok: false, error: "LOCAL_ARCHIVE_INVALID" };
     }
@@ -207,7 +214,11 @@
       return { ok: false, error: "INVALID_FORWARD_BACKUP" };
     }
 
-    const current = read(storage);
+    const currentRaw = storage.getItem(STORAGE_KEY);
+    const current = safeParse(currentRaw);
+    if (currentRaw !== null && current === null) {
+      return { ok: false, error: "LOCAL_ARCHIVE_INVALID" };
+    }
     if (current !== null && (current.schemaVersion !== 1 || current.symbol !== "XAUUSD" ||
         !Number.isFinite(Date.parse(current.trackingStartedAt)) ||
         !Array.isArray(current.records) || current.records.length > MAX_RECORDS ||
