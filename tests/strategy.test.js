@@ -916,3 +916,60 @@ test("manual journal rejects Redis payloads that omit the result field", async (
     else process.env.KV_REST_API_TOKEN = saved.redis;
   }
 });
+
+
+test("manual journal marks malformed stored state as an invalid upstream response", () => {
+  assert.throws(
+    () => journal.parseRedisState("{broken"),
+    error => error.message === "JOURNAL_STATE_INVALID" &&
+      error.diagnosticCode === "UPSTREAM_INVALID_RESPONSE"
+  );
+  assert.throws(
+    () => journal.parseRedisState({ trades: {}, activeTradeId: "" }),
+    error => error.message === "JOURNAL_STATE_INVALID" &&
+      error.diagnosticCode === "UPSTREAM_INVALID_RESPONSE"
+  );
+});
+
+test("manual journal rejects malformed mutation payloads instead of returning false success", async () => {
+  const handler = require("../api/manual-journal.js");
+  const originalFetch = global.fetch;
+  const saved = {
+    access: process.env.JOURNAL_ACCESS_TOKEN,
+    url: process.env.KV_REST_API_URL,
+    redis: process.env.KV_REST_API_TOKEN
+  };
+  const token = "journal-test-token-".padEnd(64, "x");
+  const res = {
+    code: 200, body: null,
+    setHeader() {},
+    status(code) { this.code = code; return this; },
+    json(body) { this.body = body; return this; }
+  };
+  try {
+    process.env.JOURNAL_ACCESS_TOKEN = token;
+    process.env.KV_REST_API_URL = "https://redis.example.test";
+    process.env.KV_REST_API_TOKEN = "redis-secret";
+    global.fetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ result: "not-json" })
+    });
+    await handler({
+      method: "POST",
+      headers: { authorization: "Bearer " + token },
+      body: { action: "open", signal: {}, fillPrice: 2650 }
+    }, res);
+    // Invalid signal is rejected before Redis is called.
+    assert.equal(res.code, 400);
+    assert.equal(res.body.error, "SIGNAL_ID_INVALID");
+  } finally {
+    global.fetch = originalFetch;
+    if (saved.access === undefined) delete process.env.JOURNAL_ACCESS_TOKEN;
+    else process.env.JOURNAL_ACCESS_TOKEN = saved.access;
+    if (saved.url === undefined) delete process.env.KV_REST_API_URL;
+    else process.env.KV_REST_API_URL = saved.url;
+    if (saved.redis === undefined) delete process.env.KV_REST_API_TOKEN;
+    else process.env.KV_REST_API_TOKEN = saved.redis;
+  }
+});
