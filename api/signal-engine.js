@@ -71,6 +71,56 @@ function checkLatestCompletedH1Freshness(candles, now = Date.now(), maxAgeMs = 3
   return { fresh: true, ageMs, reason: null };
 }
 
+function checkRecentMarketDataContinuity(candles, h4Candles) {
+  const requiredH1 = 400;
+  const requiredH4 = 100;
+  const maxGapMs = 72 * 3600000;
+
+  if (!Array.isArray(candles) || candles.length < requiredH1) {
+    return { continuous: false, reason: "H1_HISTORY_INSUFFICIENT", requiredH1, availableH1: Array.isArray(candles) ? candles.length : 0 };
+  }
+  if (!Array.isArray(h4Candles) || h4Candles.length < requiredH4) {
+    return { continuous: false, reason: "H4_HISTORY_INSUFFICIENT", requiredH4, availableH4: Array.isArray(h4Candles) ? h4Candles.length : 0 };
+  }
+
+  const recentH1 = candles.slice(-requiredH1);
+  for (let i = 1; i < recentH1.length; i++) {
+    if (recentH1[i].time - recentH1[i - 1].time > maxGapMs) {
+      return { continuous: false, reason: "H1_GAP_OVER_72H", requiredH1, availableH1: recentH1.length };
+    }
+  }
+
+  const recentH4 = h4Candles.slice(-requiredH4);
+  for (let i = 1; i < recentH4.length; i++) {
+    if (recentH4[i].time - recentH4[i - 1].time > maxGapMs) {
+      return { continuous: false, reason: "H4_GAP_OVER_72H", requiredH4, availableH4: recentH4.length };
+    }
+  }
+
+  const lastH1Close = recentH1[recentH1.length - 1].time + 3600000;
+  const lastH4Close = recentH4[recentH4.length - 1].end;
+  const h4LagMs = lastH1Close - lastH4Close;
+  if (!Number.isFinite(h4LagMs) || h4LagMs < 0 || h4LagMs >= 4 * 3600000) {
+    return {
+      continuous: false,
+      reason: "LATEST_H4_STALE_OR_INCOMPLETE",
+      latestH1Close: new Date(lastH1Close).toISOString(),
+      latestH4Close: Number.isFinite(lastH4Close) ? new Date(lastH4Close).toISOString() : null,
+      h4LagHours: Number.isFinite(h4LagMs) ? +(h4LagMs / 3600000).toFixed(2) : null
+    };
+  }
+
+  return {
+    continuous: true,
+    requiredH1,
+    availableH1: recentH1.length,
+    requiredH4,
+    availableH4: recentH4.length,
+    h4LagHours: +(h4LagMs / 3600000).toFixed(2),
+    maximumAllowedGapHours: 72
+  };
+}
+
 function emaSeries(values, period) {
   const out = Array(values.length).fill(null);
   if (values.length < period) return out;
@@ -486,14 +536,17 @@ module.exports = async function handler(req, res) {
     const candles = normalizeCandles(values);
     const h4Candles = aggregateH4(candles);
 
-    if (candles.length < 60 || h4Candles.length < 20) {
+    if (candles.length < 400 || h4Candles.length < 100) {
       return res.status(422).json({
         ok: false,
         error: "INSUFFICIENT_COMPLETED_CANDLES",
         candleCount: candles.length,
-        h4CandleCount: h4Candles.length
+        h4CandleCount: h4Candles.length,
+        required: { completedH1: 400, completedH4: 100 }
       });
     }
+
+    const marketDataContinuity = checkRecentMarketDataContinuity(candles, h4Candles);
 
     let quote;
 
@@ -509,11 +562,14 @@ module.exports = async function handler(req, res) {
     }
 
     const h1CandleFreshness = checkLatestCompletedH1Freshness(candles);
-    const signal = h1CandleFreshness.fresh
+    const signal = marketDataContinuity.continuous && h1CandleFreshness.fresh
       ? createSignal(candles, h4Candles, quote.status === "ok" ? quote.price : null)
       : {
           ...createSignal(candles, h4Candles, null),
-          reason: h1CandleFreshness.reason,
+          reason: !marketDataContinuity.continuous
+            ? marketDataContinuity.reason
+            : h1CandleFreshness.reason,
+          marketDataContinuity,
           h1CandleAgeSeconds: h1CandleFreshness.ageMs === null
             ? null
             : Math.floor(h1CandleFreshness.ageMs / 1000)
@@ -543,6 +599,7 @@ module.exports = async function handler(req, res) {
         adxFilter: false
       },
       quote,
+      marketDataContinuity,
       h1CandleFreshness: {
         ...h1CandleFreshness,
         ageSeconds: h1CandleFreshness.ageMs === null
@@ -573,4 +630,4 @@ module.exports = async function handler(req, res) {
 
 
 // Export pure functions for deterministic automated tests. The default export remains the Vercel handler.
-module.exports.__test = { parseTime, normalizeCandles, checkLatestCompletedH1Freshness, emaSeries, ema, aggregateH4, calculateMACDHistogram, calculateATR, analyzeTrend, createSignal, getLatestQuote };
+module.exports.__test = { parseTime, normalizeCandles, checkLatestCompletedH1Freshness, checkRecentMarketDataContinuity, emaSeries, ema, aggregateH4, calculateMACDHistogram, calculateATR, analyzeTrend, createSignal, getLatestQuote };
