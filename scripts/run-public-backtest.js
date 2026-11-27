@@ -214,7 +214,9 @@ const report = {
   results
 };
 
-process.stdout.write(JSON.stringify(report, null, 2) + String.fromCharCode(10));
+const reportJson = JSON.stringify(report, null, 2) + String.fromCharCode(10);
+process.stdout.write(reportJson);
+if (process.env.REPORT_OUTPUT) fs.writeFileSync(process.env.REPORT_OUTPUT, reportJson, "utf8");
 
 const requiredComplete = results.filter(x =>
   ["MAYIS_HAZIRAN", "TEMMUZ_AGUSTOS"].includes(x.period)
