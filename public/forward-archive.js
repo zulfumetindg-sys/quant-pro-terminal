@@ -139,5 +139,96 @@
     };
   }
 
-  return { STORAGE_KEY, capture, summarize };
+  function read(storage) {
+    return safeParse(storage && storage.getItem(STORAGE_KEY));
+  }
+
+  function exportBackup(storage) {
+    const archive = read(storage);
+    if (!archive || archive.schemaVersion !== 1 || archive.symbol !== "XAUUSD" ||
+        !Array.isArray(archive.records) || !Array.isArray(archive.conflicts)) return null;
+    return JSON.stringify({
+      backupType: "QUANT_PRO_FORWARD_ARCHIVE",
+      exportedAt: new Date().toISOString(),
+      archive
+    }, null, 2);
+  }
+
+  function restoreBackup(json, storage) {
+    if (!storage || typeof storage.getItem !== "function" ||
+        typeof storage.setItem !== "function") return { ok: false, error: "LOCAL_STORAGE_UNAVAILABLE" };
+    const backup = safeParse(json);
+    const incoming = backup && backup.archive;
+    if (!backup || backup.backupType !== "QUANT_PRO_FORWARD_ARCHIVE" ||
+        !incoming || incoming.schemaVersion !== 1 || incoming.symbol !== "XAUUSD" ||
+        !Number.isFinite(Date.parse(incoming.trackingStartedAt)) ||
+        !Number.isFinite(Date.parse(incoming.lastCheckedAt || incoming.trackingStartedAt)) ||
+        !Array.isArray(incoming.records) || incoming.records.length > MAX_RECORDS ||
+        !Array.isArray(incoming.conflicts) || incoming.conflicts.length > 100) {
+      return { ok: false, error: "INVALID_FORWARD_BACKUP" };
+    }
+
+    const seen = new Set();
+    for (const row of incoming.records) {
+      if (!row || typeof row.key !== "string" || seen.has(row.key) ||
+          ![0.1, 0.2].includes(Number(row.slippagePerSideUSD)) ||
+          !["BUY", "SELL"].includes(row.side) ||
+          !Number.isFinite(Date.parse(row.signalTime)) ||
+          !Number.isFinite(Date.parse(row.exitTime)) ||
+          Date.parse(row.exitTime) <= Date.parse(row.signalTime) ||
+          !Number.isFinite(Date.parse(row.firstObservedAt)) ||
+          ![row.entry, row.stopLoss, row.takeProfit, row.exit, row.netR].every(Number.isFinite) ||
+          typeof row.exitReason !== "string") {
+        return { ok: false, error: "INVALID_FORWARD_BACKUP" };
+      }
+      seen.add(row.key);
+    }
+
+    const current = read(storage);
+    if (current !== null && (current.schemaVersion !== 1 || current.symbol !== "XAUUSD" ||
+        !Array.isArray(current.records) || !Array.isArray(current.conflicts))) {
+      return { ok: false, error: "LOCAL_ARCHIVE_INVALID" };
+    }
+    const merged = current || {
+      schemaVersion: 1, symbol: "XAUUSD",
+      fixedTestStart: incoming.fixedTestStart || null,
+      trackingStartedAt: incoming.trackingStartedAt,
+      lastCheckedAt: incoming.lastCheckedAt || incoming.trackingStartedAt,
+      records: [], conflicts: []
+    };
+    const existingByKey = new Map(merged.records.map(row => [row.key, row]));
+    let added = 0;
+    for (const row of incoming.records) {
+      const prior = existingByKey.get(row.key);
+      if (!prior) {
+        if (merged.records.length >= MAX_RECORDS) continue;
+        merged.records.push(row);
+        existingByKey.set(row.key, row);
+        added++;
+      } else if (!sameTrade(prior, row) &&
+          !merged.conflicts.some(x => x.key === row.key)) {
+        merged.conflicts.push({
+          key: row.key,
+          firstObservedAt: prior.firstObservedAt,
+          observedAt: new Date().toISOString(),
+          note: "Imported archive conflicts with existing first-seen record; existing value retained."
+        });
+      }
+    }
+    if (Date.parse(incoming.trackingStartedAt) < Date.parse(merged.trackingStartedAt)) {
+      merged.trackingStartedAt = incoming.trackingStartedAt;
+    }
+    if (Date.parse(incoming.lastCheckedAt || incoming.trackingStartedAt) > Date.parse(merged.lastCheckedAt)) {
+      merged.lastCheckedAt = incoming.lastCheckedAt || incoming.trackingStartedAt;
+    }
+    merged.conflicts = merged.conflicts.concat(incoming.conflicts).slice(-100);
+    try {
+      storage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    } catch (_) {
+      return { ok: false, error: "LOCAL_ARCHIVE_SAVE_FAILED" };
+    }
+    return { ok: true, added, recordCount: merged.records.length, conflictCount: merged.conflicts.length };
+  }
+
+  return { STORAGE_KEY, capture, summarize, read, exportBackup, restoreBackup };
 });
