@@ -13,7 +13,7 @@ const validSubscription = {
   keys: { p256dh: "B".repeat(65), auth: "A".repeat(24) }
 };
 
-test("background push remains disabled until every secret and feature flag exists", () => {
+test("background push remains disabled until every required setting and feature flag exists", () => {
   assert.equal(backgroundPushConfigured({}), false);
   assert.equal(backgroundPushConfigured({
     ENABLE_BACKGROUND_PUSH: "true",
@@ -21,8 +21,7 @@ test("background push remains disabled until every secret and feature flag exist
     VAPID_PRIVATE_KEY: "private",
     VAPID_SUBJECT: "mailto:ops@example.org",
     KV_REST_API_URL: "https://kv.example",
-    KV_REST_API_TOKEN: "token",
-    CRON_SECRET: "secret"
+    KV_REST_API_TOKEN: "token"
   }), true);
   assert.equal(backgroundPushConfigured({
     ENABLE_BACKGROUND_PUSH: "false",
@@ -30,8 +29,7 @@ test("background push remains disabled until every secret and feature flag exist
     VAPID_PRIVATE_KEY: "private",
     VAPID_SUBJECT: "mailto:ops@example.org",
     KV_REST_API_URL: "https://kv.example",
-    KV_REST_API_TOKEN: "token",
-    CRON_SECRET: "secret"
+    KV_REST_API_TOKEN: "token"
   }), false);
 });
 
