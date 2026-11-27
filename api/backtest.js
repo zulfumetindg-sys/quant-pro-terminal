@@ -395,6 +395,43 @@ function summarizeVolatilityOutcomes(trades) {
   };
 }
 
+const PERIOD_WARMUP_DAYS = 30;
+
+function getPeriodRequestWindow(period) {
+  const start = Date.parse(period?.start);
+  const end = Date.parse(period?.end);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    throw new Error("INVALID_BACKTEST_PERIOD");
+  }
+  const formatUtc = value => new Date(value).toISOString().slice(0, 19).replace("T", " ");
+  return {
+    startDate: formatUtc(start - PERIOD_WARMUP_DAYS * 86400000),
+    endDate: formatUtc(end),
+    warmupDays: PERIOD_WARMUP_DAYS
+  };
+}
+
+function normalizeHistoricalCandles(values, now = Date.now()) {
+  const candleMap = new Map();
+  for (const x of Array.isArray(values) ? values : []) {
+    const candle = {
+      time: parseTime(x.datetime),
+      open: Number(x.open),
+      high: Number(x.high),
+      low: Number(x.low),
+      close: Number(x.close)
+    };
+    if (
+      !Number.isFinite(candle.time) ||
+      ![candle.open, candle.high, candle.low, candle.close].every(Number.isFinite) ||
+      candle.high < Math.max(candle.open, candle.close, candle.low) ||
+      candle.low > Math.min(candle.open, candle.close, candle.high)
+    ) continue;
+    if (candle.time + 3600000 <= now) candleMap.set(candle.time, candle);
+  }
+  return [...candleMap.values()].sort((a, b) => a.time - b.time);
+}
+
 function hasPeriodContinuity(candles, periodStart, periodEnd, periodComplete, now = Date.now()) {
   const periodCandles = candles.filter(
     candle => candle.time >= periodStart && candle.time < periodEnd
@@ -756,6 +793,7 @@ module.exports = async function handler(req, res) {
   }
 
   const key = process.env.TWELVE_DATA_API_KEY;
+  const mode = req.query?.mode;
 
   if (!key) {
     return res.status(503).json({
@@ -765,56 +803,64 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const url = new URL("https://api.twelvedata.com/time_series");
-    url.searchParams.set("symbol", SYMBOL);
-    url.searchParams.set("interval", "1h");
-    url.searchParams.set("outputsize", "5000");
-    url.searchParams.set("timezone", "UTC");
-    url.searchParams.set("order", "ASC");
+    let candles = [];
 
-    const response = await fetch(url, {
-      headers: { Authorization: `apikey ${key}` }
-    });
+    if (mode === "forward") {
+      const url = new URL("https://api.twelvedata.com/time_series");
+      url.searchParams.set("symbol", SYMBOL);
+      url.searchParams.set("interval", "1h");
+      url.searchParams.set("outputsize", "5000");
+      url.searchParams.set("timezone", "UTC");
+      url.searchParams.set("order", "ASC");
 
-    const body = await response.json();
-
-    if (
-      !response.ok ||
-      body.status === "error" ||
-      !Array.isArray(body.values)
-    ) {
-      return res.status(502).json({
-        ok: false,
-        error: "HISTORICAL_DATA_ERROR",
-        message: body.message || "Twelve Data verisi alınamadı."
+      const response = await fetch(url, {
+        headers: { Authorization: \`apikey \${key}\` }
       });
-    }
+      const body = await response.json();
 
-    const candleMap = new Map();
-
-    for (const x of body.values) {
-      const candle = {
-        time: parseTime(x.datetime),
-        open: Number(x.open),
-        high: Number(x.high),
-        low: Number(x.low),
-        close: Number(x.close)
-      };
-
-      if (
-        !Number.isFinite(candle.time) ||
-        ![candle.open, candle.high, candle.low, candle.close].every(Number.isFinite) ||
-        candle.high < Math.max(candle.open, candle.close, candle.low) ||
-        candle.low > Math.min(candle.open, candle.close, candle.high)
-      ) continue;
-
-      if (candle.time + 3600000 <= Date.now()) {
-        candleMap.set(candle.time, candle);
+      if (!response.ok || body.status === "error" || !Array.isArray(body.values)) {
+        return res.status(502).json({
+          ok: false,
+          error: "HISTORICAL_DATA_ERROR",
+          message: body.message || "Twelve Data verisi alınamadı."
+        });
       }
-    }
+      candles = normalizeHistoricalCandles(body.values);
+    } else {
+      // Each scored historical period gets its own bounded request plus 30 days
+      // of pre-period data. A single 5,000-bar rolling window cannot preserve
+      // warmup for older periods as the calendar advances.
+      const candleMap = new Map();
+      for (const period of PERIODS) {
+        const window = getPeriodRequestWindow(period);
+        const url = new URL("https://api.twelvedata.com/time_series");
+        url.searchParams.set("symbol", SYMBOL);
+        url.searchParams.set("interval", "1h");
+        url.searchParams.set("timezone", "UTC");
+        url.searchParams.set("order", "ASC");
+        url.searchParams.set("start_date", window.startDate);
+        url.searchParams.set("end_date", window.endDate);
 
-    const candles = [...candleMap.values()]
-      .sort((a, b) => a.time - b.time);
+        const response = await fetch(url, {
+          headers: { Authorization: \`apikey \${key}\` }
+        });
+        const body = await response.json();
+
+        if (!response.ok || body.status === "error" || !Array.isArray(body.values)) {
+          return res.status(502).json({
+            ok: false,
+            error: "HISTORICAL_DATA_ERROR",
+            period: period.name,
+            message: body.message || "Twelve Data verisi alınamadı."
+          });
+        }
+
+        for (const candle of normalizeHistoricalCandles(body.values)) {
+          candleMap.set(candle.time, candle);
+        }
+      }
+      candles = [...candleMap.values()].sort((a, b) => a.time - b.time);
+    }
 
     if (candles.length < 500) {
       return res.status(422).json({
@@ -836,7 +882,6 @@ module.exports = async function handler(req, res) {
     }
 
     const indicators = buildIndicators(candles);
-    const mode = req.query?.mode;
 
     if (mode === "forward") {
       const forwardCandles = candles.filter(
@@ -1005,5 +1050,6 @@ module.exports = async function handler(req, res) {
 module.exports.__test = {
   parseTime, emaSeries, ema, makeH4, trend, buildIndicators,
   getMetrics, getSignal, calculateTrade, runBacktest, runForwardTest, summarizeVolatilityDiagnostics, summarizeVolatilityOutcomes,
-  hasForwardWarmup, hasForwardContinuity, isForwardSignalTime, validateForwardTradeSequence
+  hasForwardWarmup, hasForwardContinuity, isForwardSignalTime, validateForwardTradeSequence,
+  getPeriodRequestWindow, normalizeHistoricalCandles
 };
