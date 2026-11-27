@@ -15,6 +15,37 @@ test("root and public app bundles stay byte-identical", () => {
   assert.equal(root, published);
 });
 
+test("live and historical indicator calculations agree on the same completed candles", () => {
+  const base = Date.UTC(2026, 0, 5, 0, 0, 0);
+  const data = Array.from({ length: 600 }, (_, i) => {
+    const mid = 2600 + i * 0.035 + 3 * Math.sin(i / 13) + 1.2 * Math.sin(i / 4);
+    return {
+      time: base + i * 3600000,
+      datetime: new Date(base + i * 3600000).toISOString(),
+      open: mid - 0.15,
+      high: mid + 1.1 + 0.2 * Math.sin(i / 5),
+      low: mid - 1.0 - 0.15 * Math.cos(i / 7),
+      close: mid + 0.1 * Math.cos(i / 3)
+    };
+  });
+
+  const liveH4 = live.aggregateH4(data);
+  const backtestH4 = backtest.makeH4(data);
+  assert.deepEqual(liveH4.map(x => x.time), backtestH4.map(x => x.time));
+  assert.deepEqual(liveH4.map(x => x.close), backtestH4.map(x => x.close));
+
+  const historical = backtest.buildIndicators(data);
+  const last = data.length - 1;
+  const liveH1Trend = live.analyzeTrend(data, 20, 50);
+  const liveH4Trend = live.analyzeTrend(liveH4, 8, 20);
+  const historicalH4Trend = backtest.trend(backtestH4, backtestH4.length - 1, 8, 20);
+
+  assert.equal(liveH1Trend.trend, historical.e20[last] > historical.e50[last] ? "BUY" : "SELL");
+  assert.equal(liveH4Trend.trend, historicalH4Trend);
+  assert.ok(Math.abs(live.calculateMACDHistogram(data) - historical.histogram[last]) < 1e-10);
+  assert.ok(Math.abs(live.calculateATR(data) - historical.atr[last]) < 1e-10);
+});
+
 test("live H4 aggregation uses complete UTC four-hour buckets", () => {
   const base = Date.UTC(2026, 10, 27, 0, 0, 0);
   const h1 = Array.from({ length: 8 }, (_, i) => candle(base + i * 3600000, 2600 + i));
