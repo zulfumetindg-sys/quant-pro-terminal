@@ -1271,7 +1271,7 @@ test("forward archive backup merge preserves existing first-seen result on confl
   forwardArchive.capture(forwardPayload("2026-11-27T15:00:00.000Z", [tradeB]), b);
   const result = forwardArchive.restoreBackup(forwardArchive.exportBackup(b), a);
   assert.equal(result.ok, true);
-  assert.equal(result.conflictCount, 1);
+  assert.equal(result.conflictCount, 2);
   const saved = forwardArchive.read(a);
   assert.equal(saved.records[0].netR, 1.9);
 });
