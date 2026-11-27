@@ -7,7 +7,7 @@
   <meta name="description" content="QUANT PRO yalnızca XAUUSD altın analiz ve sinyal terminali">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.8.14">
+  <link rel="stylesheet" href="styles.css?v=0.8.21">
   <title>QUANT PRO · XAUUSD</title>
 </head>
 <body>
@@ -37,6 +37,19 @@
     <section class="notice" id="connectionNotice">
       <div class="notice-icon">i</div>
       <div><strong id="connectionTitle">Altın verisi bekleniyor</strong><p id="connectionText">Yalnızca XAUUSD sorgulanır. API kotasını korumak için yenileme istekleri arasında en az 60 saniye bulunur.</p></div>
+    </section>
+
+
+    <section class="signal-panel" id="notification-panel">
+      <div class="section-head compact">
+        <div><div class="eyebrow">MOBILE ALERTS</div><h2>Yeni sinyal bildirimleri</h2></div>
+        <span class="pill blue">İSTEĞE BAĞLI</span>
+      </div>
+      <p class="signal-muted">Bildirim iznini yalnızca düğmeye bastığında ister. Yeni ve geçerliliği devam eden AL/SAT sinyali, uygulama açıkken veriyi yenilediğinde bir kez bildirilir. Uygulama kapalıyken otomatik push henüz yoktur.</p>
+      <div class="backtest-tools">
+        <button class="connect-btn" id="signalNotificationBtn">Sinyal bildirimlerini etkinleştir</button>
+        <div id="signalNotificationStatus" class="journal-status">Bildirimler kapalı. Bu özellik emir göndermez ve XM hesabına bağlanmaz.</div>
+      </div>
     </section>
 
     <section class="stats-grid">
@@ -122,12 +135,13 @@
       <div id="journalStatus" class="journal-status">Veritabanı gerekmiyor.</div>
       <div id="journalActive" class="journal-records">Henüz açık işlem yok.</div>
       <div id="journalHistory" class="journal-records"></div>
-    </section>ion>
+    </section>
 
     <footer><span>QUANT PRO · v0.8.20 · XAUUSD ONLY</span><span>Yalnızca analiz · Otomatik emir yok · Trade-ready değil</span></footer>
   </main>
 
-  <script src="forward-archive.js?v=0.8.20"></script>
-  <script src="app.js?v=0.8.20"></script>
+  <script src="forward-archive.js?v=0.8.21"></script>
+  <script src="signal-notification-policy.js?v=0.8.21"></script>
+  <script src="app.js?v=0.8.21"></script>
 </body>
 </html>
