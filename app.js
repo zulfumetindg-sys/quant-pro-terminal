@@ -192,22 +192,42 @@ async function loadBacktest() {
   try {
     const response = await fetchWithTimeout("/api/backtest", { cache: "no-store" }, 60000);
     const payload = await response.json();
-    if (!response.ok || !payload.ok) throw new Error(payload.message || payload.error || "Geri test başarısız.");
-    const periods = payload.results || [];
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.message || payload.error || "Geri test başarısız.");
+    }
+    const periods = Array.isArray(payload.results) ? payload.results : [];
+    if (!periods.length) throw new Error("API geçerli dönem sonucu döndürmedi.");
+    const rows = periods.map(period => {
+      const metrics = period && period.metrics && typeof period.metrics === "object"
+        ? period.metrics : null;
+      const label = esc(period && period.period || "Dönem bilinmiyor");
+      const slippage = esc(period && period.slippagePerSideUSD);
+      if (!metrics) {
+        const warmupMissing = period && period.periodStatus === "PERIOD_WARMUP_INCOMPLETE";
+        const detail = warmupMissing
+          ? '<span>H1 geçmişi: ' + esc(period.warmupAvailable && period.warmupAvailable.completedH1) + '/400</span>' +
+            '<span>H4 geçmişi: ' + esc(period.warmupAvailable && period.warmupAvailable.completedH4) + '/100</span>' +
+            '<span>Gösterge ısınma verisi yetersiz</span>'
+          : '<span>Veri sürekliliği veya dönem doğrulaması başarısız</span>' +
+            '<span>İzin verilen en uzun boşluk: ' + esc(period && period.maximumAllowedGapHours || 72) + ' saat</span>' +
+            '<span>' + esc(period && period.warning || "Eksik veri nedeniyle performans hesaplanmadı.") + '</span>';
+        return '<div class="backtest-row"><b>' + label + ' · Kayma/yan: ' + slippage + '</b>' +
+          '<span>Performans: HESAPLANMADI</span>' + detail + '</div>';
+      }
+      return '<div class="backtest-row"><b>' + label + ' · Kayma/yan: ' + slippage + '</b>' +
+        '<span>İşlem: ' + esc(metrics.tradeCount) + '</span>' +
+        '<span>WR: ' + (metrics.winRatePercent == null ? "—" : esc(metrics.winRatePercent) + "%") + '</span>' +
+        '<span>PF: ' + esc(metrics.profitFactor) + '</span>' +
+        '<span>Net: ' + esc(metrics.netProfitR) + 'R</span>' +
+        '<span>DD: ' + esc(metrics.maxDrawdownR) + 'R</span>' +
+        '<span>' + (metrics.insufficientSample ? "Örneklem yetersiz" : "30+ işlem") + '</span>' +
+        '<span>' + (period.periodComplete ? "Dönem tamamlandı" : "Dönem sürüyor · açık işlem sayılmadı") + '</span></div>';
+    });
     output.innerHTML =
       '<p>Motor: ' + esc(payload.engine) + ' · Mum: ' + esc(payload.candleCount) +
       ' · Spread: ' + esc(payload.costModel && payload.costModel.spreadUSD) +
       ' · Kayma: işlem başına yön bazında $0.10 / $0.20 senaryoları</p>' +
-      periods.map(period =>
-        '<div class="backtest-row"><b>' + esc(period.period) + ' · Kayma/yan: ' + esc(period.slippagePerSideUSD) + '</b>' +
-        '<span>İşlem: ' + esc(period.metrics.tradeCount) + '</span>' +
-        '<span>WR: ' + (period.metrics.winRatePercent == null ? "—" : esc(period.metrics.winRatePercent) + "%") + '</span>' +
-        '<span>PF: ' + esc(period.metrics.profitFactor) + '</span>' +
-        '<span>Net: ' + esc(period.metrics.netProfitR) + 'R</span>' +
-        '<span>DD: ' + esc(period.metrics.maxDrawdownR) + 'R</span>' +
-        '<span>' + (period.metrics.insufficientSample ? "Örneklem yetersiz" : "30+ işlem") + '</span>' +
-        '<span>' + (period.periodComplete ? "Dönem tamamlandı" : "Dönem sürüyor · açık işlem sayılmadı") + '</span></div>'
-      ).join("") +
+      rows.join("") +
       '<p class="risk-note">Tüm altı maliyet/dönem kombinasyonu gösterilir. OHLC simülasyonudur; canlı kazanma olasılığı değildir. Gerçek bid/ask, spread, komisyon ve kayma doğrulanmamıştır. Tamamlanmamış dönemde açık işlemler sonuçlara dahil edilmez.</p>';
   } catch (error) {
     output.textContent = "Geri test alınamadı: " + error.message;
@@ -216,7 +236,6 @@ async function loadBacktest() {
     button.textContent = "Tarihsel geri testi çalıştır";
   }
 }
-
 const JOURNAL_STORAGE_KEY = "quantProManualJournalV1";
 let journalState = { trades: [], activeTradeId: "" };
 try {
