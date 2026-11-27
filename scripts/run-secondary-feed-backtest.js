@@ -238,7 +238,7 @@ function summarize(trades) {
     byEntryHourUTCAndSide: summarizeMap(byEntryHourUTCAndSide),
     byVolatilityRegime,
     byEntryYearAndVolatilityRegime: byEntryYearAndVolatilityRegimeSummary,
-    volatilityRegimeInterpretation: "EXPLORATORY_DESCRIPTIVE_BINS_NOT_VALIDATED_FILTERS";
+    volatilityRegimeInterpretation: "EXPLORATORY_DESCRIPTIVE_BINS_NOT_VALIDATED_FILTERS"
   };
 }
 
