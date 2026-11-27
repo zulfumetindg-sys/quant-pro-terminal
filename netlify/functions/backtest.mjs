@@ -1,4 +1,5 @@
+import apiHandler from "../../api/backtest.js";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { createApiHandler } = require("./api-adapter.cjs");
-export const handler = createApiHandler("../../api/backtest.js");
+const { adaptHandler } = require("./api-adapter.cjs");
+export const handler = adaptHandler(apiHandler);
