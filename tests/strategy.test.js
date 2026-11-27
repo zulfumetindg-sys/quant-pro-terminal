@@ -643,3 +643,114 @@ test("manual journal API reads Redis and sends an authenticated atomic open comm
     else process.env.KV_REST_API_TOKEN = saved.redis;
   }
 });
+
+
+test("manual journal classifies provider failures without exposing provider messages", () => {
+  assert.equal(journal.providerErrorCategory("Unauthorized: invalid token"), "AUTH");
+  assert.equal(journal.providerErrorCategory("ERR unknown command EVAL"), "COMMAND");
+  assert.equal(journal.providerErrorCategory("rate limit exceeded"), "RATE_LIMIT");
+  assert.equal(journal.providerErrorCategory("request timed out"), "TIMEOUT");
+  assert.equal(journal.providerErrorCategory("unexpected upstream response"), "PROVIDER_ERROR");
+});
+
+test("manual journal Redis HTTP failures are logged with safe metadata and return a stable API error", async () => {
+  const handler = require("../api/manual-journal.js");
+  const originalFetch = global.fetch;
+  const originalError = console.error;
+  const saved = {
+    access: process.env.JOURNAL_ACCESS_TOKEN,
+    url: process.env.KV_REST_API_URL,
+    redis: process.env.KV_REST_API_TOKEN
+  };
+  const token = "journal-test-token-".padEnd(64, "x");
+  const redisSecret = "redis-secret-do-not-log";
+  const logs = [];
+  const res = {
+    code: 200, body: null,
+    setHeader() {},
+    status(code) { this.code = code; return this; },
+    json(body) { this.body = body; return this; }
+  };
+
+  try {
+    process.env.JOURNAL_ACCESS_TOKEN = token;
+    process.env.KV_REST_API_URL = "https://redis.example.test";
+    process.env.KV_REST_API_TOKEN = redisSecret;
+    console.error = (...args) => logs.push(args);
+    global.fetch = async () => ({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: "Unauthorized: " + redisSecret })
+    });
+
+    await handler({
+      method: "GET",
+      headers: { authorization: "Bearer " + token }
+    }, res);
+
+    assert.equal(res.code, 502);
+    assert.equal(res.body.error, "JOURNAL_SERVICE_UNAVAILABLE");
+    assert.equal(logs.length, 1);
+    assert.deepEqual(logs[0][1], {
+      operation: "GET_STATE",
+      httpStatus: 401,
+      providerCategory: "AUTH"
+    });
+    assert.equal(JSON.stringify(logs).includes(redisSecret), false);
+  } finally {
+    global.fetch = originalFetch;
+    console.error = originalError;
+    if (saved.access === undefined) delete process.env.JOURNAL_ACCESS_TOKEN;
+    else process.env.JOURNAL_ACCESS_TOKEN = saved.access;
+    if (saved.url === undefined) delete process.env.KV_REST_API_URL;
+    else process.env.KV_REST_API_URL = saved.url;
+    if (saved.redis === undefined) delete process.env.KV_REST_API_TOKEN;
+    else process.env.KV_REST_API_TOKEN = saved.redis;
+  }
+});
+
+test("manual journal reports network failures without leaking credentials", async () => {
+  const handler = require("../api/manual-journal.js");
+  const originalFetch = global.fetch;
+  const originalError = console.error;
+  const saved = {
+    access: process.env.JOURNAL_ACCESS_TOKEN,
+    url: process.env.KV_REST_API_URL,
+    redis: process.env.KV_REST_API_TOKEN
+  };
+  const token = "journal-test-token-".padEnd(64, "x");
+  const logs = [];
+  const res = {
+    code: 200, body: null,
+    setHeader() {},
+    status(code) { this.code = code; return this; },
+    json(body) { this.body = body; return this; }
+  };
+
+  try {
+    process.env.JOURNAL_ACCESS_TOKEN = token;
+    process.env.KV_REST_API_URL = "https://redis.example.test";
+    process.env.KV_REST_API_TOKEN = "redis-secret";
+    console.error = (...args) => logs.push(args);
+    global.fetch = async () => { throw new TypeError("fetch failed"); };
+
+    await handler({
+      method: "GET",
+      headers: { authorization: "Bearer " + token }
+    }, res);
+
+    assert.equal(res.code, 502);
+    assert.equal(res.body.error, "JOURNAL_SERVICE_UNAVAILABLE");
+    assert.deepEqual(logs[0][1], { operation: "GET_STATE", code: "NETWORK" });
+    assert.equal(JSON.stringify(logs).includes("redis-secret"), false);
+  } finally {
+    global.fetch = originalFetch;
+    console.error = originalError;
+    if (saved.access === undefined) delete process.env.JOURNAL_ACCESS_TOKEN;
+    else process.env.JOURNAL_ACCESS_TOKEN = saved.access;
+    if (saved.url === undefined) delete process.env.KV_REST_API_URL;
+    else process.env.KV_REST_API_URL = saved.url;
+    if (saved.redis === undefined) delete process.env.KV_REST_API_TOKEN;
+    else process.env.KV_REST_API_TOKEN = saved.redis;
+  }
+});
