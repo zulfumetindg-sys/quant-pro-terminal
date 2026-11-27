@@ -447,12 +447,40 @@ test("forward trade integrity rejects pre-start, duplicate and invalid closed tr
     entry: 100, stopLoss: 99, takeProfit: 102, exit: 102, netR: 2
   };
   assert.equal(backtest.validateForwardTradeSequence([trade], null, start, start + 7200000).valid, true);
-  assert.equal(backtest.validateForwardTradeSequence([trade, trade], null, start, start + 7200000).reason, "DUPLICATE_SIGNAL_TIME");
+  assert.equal(backtest.validateForwardTradeSequence([trade, trade], null, start, start + 7200000).reason, "NON_CHRONOLOGICAL_SIGNAL_SEQUENCE");
   const beforeStart = { ...trade, signalTime: new Date(start).toISOString() };
   assert.equal(backtest.validateForwardTradeSequence([beforeStart], null, start, start + 7200000).reason, "TRADE_NOT_STRICTLY_AFTER_FORWARD_START");
-  const open = { ...trade, open: true, status: "OPEN_NOT_COUNTED" };
+  const open = { ...trade, open: true, status: "OPEN_NOT_COUNTED", lastPrice: 101, unrealizedR: 1 };
   assert.equal(backtest.validateForwardTradeSequence([], open, start, start + 7200000).openTradeExcluded, true);
   assert.equal(backtest.validateForwardTradeSequence([trade], open, start, start + 7200000).reason, "INVALID_OR_DUPLICATE_OPEN_TRADE");
+});
+
+test("forward trade integrity rejects unsorted and overlapping trades", () => {
+  const start = Date.UTC(2026, 10, 26, 20, 0, 0);
+  const first = {
+    side: "BUY", signalTime: new Date(start + 3600000).toISOString(),
+    exitTime: new Date(start + 7200000).toISOString(),
+    entry: 100, stopLoss: 99, takeProfit: 102, exit: 101, netR: 1
+  };
+  const second = {
+    side: "SELL", signalTime: new Date(start + 5400000).toISOString(),
+    exitTime: new Date(start + 9000000).toISOString(),
+    entry: 100, stopLoss: 101, takeProfit: 98, exit: 99, netR: 1
+  };
+  assert.equal(backtest.validateForwardTradeSequence([first, second], null, start, start + 10000000).reason, "OVERLAPPING_TRADE_SEQUENCE");
+  const later = { ...second, signalTime: new Date(start + 8000000).toISOString(), exitTime: new Date(start + 10000000).toISOString() };
+  assert.equal(backtest.validateForwardTradeSequence([later, first], null, start, start + 11000000).reason, "NON_CHRONOLOGICAL_SIGNAL_SEQUENCE");
+});
+
+test("forward trade integrity checks directional stop/target geometry and R consistency", () => {
+  const start = Date.UTC(2026, 10, 26, 20, 0, 0);
+  const base = {
+    side: "BUY", signalTime: new Date(start + 3600000).toISOString(),
+    exitTime: new Date(start + 7200000).toISOString(),
+    entry: 100, stopLoss: 99, takeProfit: 102, exit: 102, netR: 2
+  };
+  assert.equal(backtest.validateForwardTradeSequence([{ ...base, stopLoss: 101 }], null, start, start + 7200000).reason, "INVALID_TRADE_PRICE_OR_RESULT");
+  assert.equal(backtest.validateForwardTradeSequence([{ ...base, netR: 1.5 }], null, start, start + 7200000).reason, "TRADE_RESULT_DOES_NOT_MATCH_EXIT_PRICE");
 });
 
 test("forward test excludes the pinned start candle and all earlier signal closes", () => {
