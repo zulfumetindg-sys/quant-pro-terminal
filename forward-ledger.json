@@ -3,14 +3,8 @@
   "symbol": "XAUUSD",
   "timeframe": "H1 + COMPLETED H4",
   "startTime": "2026-11-26T20:00:00.000Z",
-  "lastCheckedAt": "2026-11-27T13:38:02.476Z",
-  "lastError": {
-    "at": "2026-11-27T13:38:02.476Z",
-    "httpStatus": 503,
-    "error": "API_KEY_MISSING",
-    "message": "Forward API yanıtı eksik veya beklenen iki maliyet senaryosuyla uyuşmuyor.",
-    "historyStatus": null
-  },
+  "lastCheckedAt": "2026-11-27T13:53:47.065Z",
+  "lastError": null,
   "checks": [
     {
       "checkedAt": "2026-11-26T21:14:37.669Z",
@@ -447,7 +441,102 @@
       "ok": false,
       "error": "API_KEY_MISSING",
       "httpStatus": 503
+    },
+    {
+      "checkedAt": "2026-11-27T13:53:47.065Z",
+      "ok": true,
+      "forwardCandleCount": 17,
+      "warmupComplete": true,
+      "results": [
+        {
+          "slippagePerSideUSD": 0.1,
+          "status": "COLLECTING_MINIMUM_30_CLOSED_TRADES",
+          "closedTradeMetrics": {
+            "tradeCount": 1,
+            "winCount": 1,
+            "lossCount": 0,
+            "winRatePercent": 100,
+            "profitFactor": "NO_LOSSES",
+            "netProfitR": 2,
+            "maxDrawdownR": 0,
+            "averageR": 1.995,
+            "grossWinR": 1.995,
+            "grossLossR": 0,
+            "insufficientSample": true
+          },
+          "openTrade": {
+            "open": true,
+            "side": "BUY",
+            "signalTime": "2026-11-27T10:00:00.000Z",
+            "entryReference": 3672.63178,
+            "entry": 3672.88178,
+            "stopLoss": 3648.2439575000003,
+            "takeProfit": 3722.1574250000003,
+            "lastPrice": 3668.82961,
+            "unrealizedR": -0.175,
+            "status": "OPEN_NOT_COUNTED"
+          }
+        },
+        {
+          "slippagePerSideUSD": 0.2,
+          "status": "COLLECTING_MINIMUM_30_CLOSED_TRADES",
+          "closedTradeMetrics": {
+            "tradeCount": 1,
+            "winCount": 1,
+            "lossCount": 0,
+            "winRatePercent": 100,
+            "profitFactor": "NO_LOSSES",
+            "netProfitR": 1.99,
+            "maxDrawdownR": 0,
+            "averageR": 1.989,
+            "grossWinR": 1.989,
+            "grossLossR": 0,
+            "insufficientSample": true
+          },
+          "openTrade": {
+            "open": true,
+            "side": "BUY",
+            "signalTime": "2026-11-27T10:00:00.000Z",
+            "entryReference": 3672.63178,
+            "entry": 3672.98178,
+            "stopLoss": 3648.3439575,
+            "takeProfit": 3722.2574250000002,
+            "lastPrice": 3668.82961,
+            "unrealizedR": -0.183,
+            "status": "OPEN_NOT_COUNTED"
+          }
+        }
+      ]
     }
   ],
-  "trades": []
+  "trades": [
+    {
+      "side": "BUY",
+      "signalTime": "2026-11-27T04:00:00.000Z",
+      "entryReference": 3629.75023,
+      "stopLoss": 3611.536979642857,
+      "takeProfit": 3666.926730714286,
+      "exit": 3666.826730714286,
+      "exitTime": "2026-11-27T09:00:00.000Z",
+      "exitReason": "TAKE_PROFIT",
+      "entry": 3630.00023,
+      "netR": 1.995,
+      "slippagePerSideUSD": 0.1,
+      "recordedAt": "2026-11-27T13:53:47.065Z"
+    },
+    {
+      "side": "BUY",
+      "signalTime": "2026-11-27T04:00:00.000Z",
+      "entryReference": 3629.75023,
+      "stopLoss": 3611.536979642857,
+      "takeProfit": 3666.926730714286,
+      "exit": 3666.826730714286,
+      "exitTime": "2026-11-27T09:00:00.000Z",
+      "exitReason": "TAKE_PROFIT",
+      "entry": 3630.10023,
+      "netR": 1.989,
+      "slippagePerSideUSD": 0.2,
+      "recordedAt": "2026-11-27T13:53:47.065Z"
+    }
+  ]
 }
