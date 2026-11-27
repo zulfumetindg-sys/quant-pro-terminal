@@ -6,7 +6,7 @@ const {
   validateSubscription,
   subscriptionKey,
   encodePushBody
-} = require("../api/push-utils");
+} = require("../lib/push-utils");
 
 const validSubscription = {
   endpoint: "https://fcm.googleapis.com/fcm/send/test-token",
