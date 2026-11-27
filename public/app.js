@@ -236,6 +236,54 @@ async function loadBacktest() {
     button.textContent = "Tarihsel geri testi çalıştır";
   }
 }
+async function loadForwardTest() {
+  const button = $("forwardTestBtn");
+  const output = $("forwardTestResults");
+  button.disabled = true;
+  button.textContent = "İleri test kontrol ediliyor…";
+  output.textContent = "Sabit başlangıç tarihinden sonraki tamamlanmış H1 mumları analiz ediliyor…";
+  try {
+    const response = await fetchWithTimeout("/api/backtest?mode=forward", { cache: "no-store" }, 60000);
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      const reasons = {
+        FORWARD_TEST_DATA_GAP: "İleri test döneminde 72 saati aşan veri boşluğu var. Eksik dönem performansı hesaplanmadı.",
+        FORWARD_TEST_WARMUP_INCOMPLETE: "İleri test başlangıcından önce gereken H1/H4 geçmişi artık mevcut değil. Güvenilir sonuç üretilemedi."
+      };
+      throw new Error(reasons[payload.error] || payload.message || payload.error || "İleri test başarısız.");
+    }
+    if (!Array.isArray(payload.results) || !payload.results.length) {
+      throw new Error("İleri test API'si geçerli sonuç döndürmedi.");
+    }
+    const rows = payload.results.map(item => {
+      const m = item && item.closedTradeMetrics && typeof item.closedTradeMetrics === "object"
+        ? item.closedTradeMetrics : null;
+      if (!m) return '<div class="backtest-row"><b>Kayma/yan: ' + esc(item && item.slippagePerSideUSD) +
+        '</b><span>Performans: HESAPLANMADI</span></div>';
+      const open = item.openTrade
+        ? '<span>Açık pozisyon: ' + esc(item.openTrade.side) + ' · ' +
+          esc(item.openTrade.unrealizedR) + 'R (gerçekleşmiş sonuca dahil değil)</span>'
+        : '<span>Açık pozisyon yok</span>';
+      return '<div class="backtest-row"><b>İleri test · Kayma/yan: ' + esc(item.slippagePerSideUSD) + '</b>' +
+        '<span>Kapanan işlem: ' + esc(m.tradeCount) + '</span>' +
+        '<span>WR: ' + (m.winRatePercent == null ? "—" : esc(m.winRatePercent) + "%") + '</span>' +
+        '<span>PF: ' + esc(m.profitFactor) + '</span>' +
+        '<span>Net: ' + esc(m.netProfitR) + 'R</span>' +
+        '<span>DD: ' + esc(m.maxDrawdownR) + 'R</span>' + open +
+        '<span>' + (item.status === "FORWARD_SAMPLE_30_REACHED" ? "30 kapanmış işlem eşiği görüldü; doğrulama sürüyor" : "30 kapanmış işlem için veri toplanıyor") + '</span></div>';
+    });
+    output.innerHTML =
+      '<p>Motor: ' + esc(payload.engine) + ' · Sabit başlangıç: ' + esc(payload.startTime) +
+      ' · İleri dönem H1 mum: ' + esc(payload.forwardCandleCount) + '</p>' +
+      rows.join("") +
+      '<p class="risk-note">Bu, sabit başlangıç tarihinden sonraki veriler üzerinde yeniden hesaplanan ileri dönem simülasyonudur; sunucuda kalıcı işlem günlüğü tutulmaz. 30 işlem yalnızca asgari örneklem eşiğidir. Canlı kazanma olasılığı değildir ve sistem trade-ready değildir. Gerçek XM spread, komisyon ve kayma doğrulanmamıştır.</p>';
+  } catch (error) {
+    output.textContent = "İleri test alınamadı: " + error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Bağımsız ileri testi kontrol et";
+  }
+}
 const JOURNAL_STORAGE_KEY = "quantProManualJournalV1";
 let journalState = { trades: [], activeTradeId: "" };
 try {
@@ -343,6 +391,7 @@ $("journalStatus").textContent = "Veritabanı gerekmiyor · kayıtlar bu cihazı
 
 $("refreshBtn").addEventListener("click", () => loadSignal());
 $("backtestBtn").addEventListener("click", loadBacktest);
+$("forwardTestBtn").addEventListener("click", loadForwardTest);
 $("aiAnalyzeBtn").addEventListener("click", loadFreeAnalysis);
 let installPrompt;
 window.addEventListener("beforeinstallprompt", event => {
