@@ -1,4 +1,4 @@
-name: QUANT PRO public-data historical validation
+name: QUANT PRO historical validation suite v2
 
 on:
   pull_request:
