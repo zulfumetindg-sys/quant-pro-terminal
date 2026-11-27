@@ -620,6 +620,9 @@ function validateForwardTradeSequence(trades, openTrade, startTime = FORWARD_STA
     if (!Number.isFinite(signalTime) || signalTime <= start) {
       return { valid: false, reason: "TRADE_NOT_STRICTLY_AFTER_FORWARD_START" };
     }
+    if (seen.has(signalTime)) {
+      return { valid: false, reason: "DUPLICATE_SIGNAL_TIME" };
+    }
     if (signalTime <= previousSignalTime) {
       return { valid: false, reason: "NON_CHRONOLOGICAL_SIGNAL_SEQUENCE" };
     }
@@ -628,9 +631,6 @@ function validateForwardTradeSequence(trades, openTrade, startTime = FORWARD_STA
     }
     if (!Number.isFinite(exitTime) || exitTime <= signalTime || exitTime > now) {
       return { valid: false, reason: "INVALID_TRADE_EXIT_TIME" };
-    }
-    if (seen.has(signalTime)) {
-      return { valid: false, reason: "DUPLICATE_SIGNAL_TIME" };
     }
     seen.add(signalTime);
     if (!validGeometry(trade) || !Number.isFinite(trade.exit) || trade.exit <= 0 ||
