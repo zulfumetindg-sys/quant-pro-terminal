@@ -651,7 +651,8 @@ function validateForwardTradeSequence(trades, openTrade, startTime = FORWARD_STA
   if (openTrade) {
     const signalTime = Date.parse(openTrade.signalTime);
     if (openTrade.open !== true || openTrade.status !== "OPEN_NOT_COUNTED" ||
-        !Number.isFinite(signalTime) || signalTime <= start || seen.has(signalTime)) {
+        !Number.isFinite(signalTime) || signalTime <= start || signalTime > now ||
+        seen.has(signalTime)) {
       return { valid: false, reason: "INVALID_OR_DUPLICATE_OPEN_TRADE" };
     }
     if (signalTime <= previousSignalTime) {
