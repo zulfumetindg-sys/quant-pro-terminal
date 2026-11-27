@@ -1348,7 +1348,7 @@ test("historical period is not scored without its own 400 H1 and 100 H4 warmup",
     base + 601 * 3600000
   );
   assert.notEqual(warmed.periodStatus, "PERIOD_WARMUP_INCOMPLETE");
-  assert.equal(warmed.warmupComplete, undefined);
+  assert.equal(warmed.warmupComplete, true);
 });
 
 
