@@ -117,7 +117,7 @@ test("metrics calculate win rate, profit factor, net R and drawdown deterministi
   assert.equal(metrics.insufficientSample, true);
 });
 
-test("live signal entry and risk levels are based on the current provider quote estimate", () => {
+test("live signal entry and risk levels are based on the latest 1-minute candle close", () => {
   const base = Date.UTC(2026, 0, 5, 0, 0, 0);
   const data = Array.from({ length: 500 }, (_, i) =>
     candle(base + i * 3600000, 2000 + i * 0.25, 0.8)
@@ -127,7 +127,7 @@ test("live signal entry and risk levels are based on the current provider quote 
   const signal = live.createSignal(data, h4, quote);
 
   assert.equal(signal.status, "BUY");
-  assert.equal(signal.entryReference, "LATEST_PROVIDER_PRICE_ESTIMATE");
+  assert.equal(signal.entryReference, "TWELVE_DATA_LAST_1MIN_CANDLE_CLOSE");
   assert.equal(signal.entry, quote);
   assert.ok(signal.sl < quote);
   assert.ok(signal.tp > quote);
