@@ -21,7 +21,7 @@ function updateStats(signal, dataOnline) {
   $("activeCount").textContent = active ? "1" : "0";
   $("activeDetail").textContent = active ? "Altın için sinyal var" : "Şu an AL / SAT sinyali yok";
   $("dataStatus").textContent = dataOnline ? "DOĞRULANDI" : "DOĞRULANMADI";
-  $("dataDetail").textContent = dataOnline ? "Son 1 dakikalık veri zaman damgası kontrol edildi" : "Fiyat verisinin güncelliği doğrulanamadı";
+  $("dataDetail").textContent = dataOnline ? "Son 1 dakikalık mum zaman damgası kontrol edildi" : "Fiyat verisinin güncelliği doğrulanamadı";
 }
 
 function renderSignal(signal) {
@@ -40,8 +40,8 @@ function renderSignal(signal) {
     '">' + label + '</span><span class="signal-muted">XAUUSD · H1 + tamamlanmış H4</span></div>';
 
   html += '<div class="signal-grid">' +
-    '<div><small>Doğrulanmış sağlayıcı fiyatı</small><b>' + fmt(signal.currentPrice) + '</b></div>' +
-    '<div><small>Varsayımsal giriş (güncel fiyat)</small><b>' + fmt(signal.entry) + '</b></div>' +
+    '<div><small>Twelve Data son 1 dk mum kapanışı</small><b>' + fmt(signal.currentPrice) + '</b></div>' +
+    '<div><small>Varsayımsal giriş (son 1 dk mum close)</small><b>' + fmt(signal.entry) + '</b></div>' +
     '<div><small>Stop loss</small><b>' + fmt(signal.sl) + '</b></div>' +
     '<div><small>Take profit</small><b>' + fmt(signal.tp) + '</b></div>' +
     '<div><small>Brüt risk / getiri (maliyet öncesi)</small><b>' + esc(signal.riskReward || "—") + '</b></div>' +
@@ -118,7 +118,7 @@ async function loadSignal(force = false) {
       " · " + (payload.completedH4Count ?? "—") + " tamamlanmış H4 mum";
 
     if (online) {
-      setNotice("Son 1 dakikalık veri zaman damgası kontrol edildi", "Twelve Data son 1 dakikalık fiyat mumunun zaman damgası " + (payload.quote.ageSeconds ?? "—") + " saniye önce. Bu gerçek tick zamanı değildir; bid/ask ve işlem maliyetleri doğrulanmamıştır.", "ok");
+      setNotice("Son 1 dakikalık veri zaman damgası kontrol edildi", "Twelve Data quote yanıtındaki son 1 dakikalık mumun zaman damgası " + (payload.quote.ageSeconds ?? "—") + " saniye önce. Fiyat alanı mumun close değeridir; gerçek tick veya işlem yapılabilir bid/ask değildir. Spread, kayma ve komisyon doğrulanmamıştır.", "ok");
     } else {
       setNotice("Fiyat güncelliği doğrulanamadı", "Zaman damgası eksik veya 180 saniyeden eski. Güvenlik gereği AL/SAT sinyali üretilmedi.", "bad");
     }
