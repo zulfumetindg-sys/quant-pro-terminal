@@ -1,8 +1,7 @@
 {
-  "crons": [
-    {
-      "path": "/api/push-dispatch",
-      "schedule": "5 * * * *"
+  "functions": {
+    "api/push-dispatch.js": {
+      "maxDuration": 30
     }
-  ]
+  }
 }
