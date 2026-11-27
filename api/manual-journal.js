@@ -305,11 +305,17 @@ async function mutate(action, args, env) {
   } catch {
     throw storageError("JOURNAL_MUTATION_RESPONSE_INVALID", "UPSTREAM_INVALID_RESPONSE");
   }
-  if (!parsed || typeof parsed !== "object" || typeof parsed.ok !== "boolean") {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) ||
+      typeof parsed.ok !== "boolean") {
     throw storageError("JOURNAL_MUTATION_RESPONSE_INVALID", "UPSTREAM_INVALID_RESPONSE");
   }
-  if (parsed.ok && (!parsed.state || !Array.isArray(parsed.state.trades) ||
-      typeof parsed.state.activeTradeId !== "string")) {
+  if (parsed.ok) {
+    try {
+      parseRedisState(parsed.state);
+    } catch {
+      throw storageError("JOURNAL_MUTATION_RESPONSE_INVALID", "UPSTREAM_INVALID_RESPONSE");
+    }
+  } else if (typeof parsed.error !== "string" || !/^[A-Z0-9_]{3,80}$/.test(parsed.error)) {
     throw storageError("JOURNAL_MUTATION_RESPONSE_INVALID", "UPSTREAM_INVALID_RESPONSE");
   }
   return parsed;
