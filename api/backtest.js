@@ -566,6 +566,7 @@ function runBacktest(candles, h4, indicators, slippage, period, now = Date.now()
     period: period.name,
     periodComplete,
     periodStatus: periodComplete ? "PERIOD_COMPLETE" : "PERIOD_STILL_RUNNING",
+    warmupComplete: true,
     continuityComplete: true,
     spreadUSD: SPREAD_USD,
     slippagePerSideUSD: slippage,
