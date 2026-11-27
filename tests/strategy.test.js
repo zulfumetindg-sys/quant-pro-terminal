@@ -1275,3 +1275,53 @@ test("forward archive backup merge preserves existing first-seen result on confl
   const saved = forwardArchive.read(a);
   assert.equal(saved.records[0].netR, 1.9);
 });
+
+
+test("forward archive repeated conflict imports remain idempotent", () => {
+  const a = memoryStorage(), b = memoryStorage();
+  forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), a);
+  forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), b);
+  const tradeA = sampleForwardTrade("2026-11-27T12:00:00.000Z", "2026-11-27T14:00:00.000Z", 1.9);
+  const tradeB = sampleForwardTrade("2026-11-27T12:00:00.000Z", "2026-11-27T14:00:00.000Z", 1.7);
+  forwardArchive.capture(forwardPayload("2026-11-27T15:00:00.000Z", [tradeA]), a);
+  forwardArchive.capture(forwardPayload("2026-11-27T15:00:00.000Z", [tradeB]), b);
+  const backup = forwardArchive.exportBackup(b);
+  assert.equal(forwardArchive.restoreBackup(backup, a).conflictCount, 2);
+  assert.equal(forwardArchive.restoreBackup(backup, a).conflictCount, 2);
+});
+
+test("forward archive restore rejects tampered record keys and malformed conflicts atomically", () => {
+  const storage = memoryStorage();
+  forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), storage);
+  const trade = sampleForwardTrade("2026-11-27T12:00:00.000Z", "2026-11-27T14:00:00.000Z");
+  forwardArchive.capture(forwardPayload("2026-11-27T15:00:00.000Z", [trade]), storage);
+  const backup = JSON.parse(forwardArchive.exportBackup(storage));
+  backup.archive.records[0].key = "forged-key";
+  const before = storage.getItem(forwardArchive.STORAGE_KEY);
+  const invalid = forwardArchive.restoreBackup(JSON.stringify(backup), storage);
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.error, "INVALID_FORWARD_BACKUP");
+  assert.equal(storage.getItem(forwardArchive.STORAGE_KEY), before);
+
+  const malformedConflict = JSON.parse(forwardArchive.exportBackup(storage));
+  malformedConflict.archive.conflicts.push({ key: "bad", note: {} });
+  const invalidConflict = forwardArchive.restoreBackup(JSON.stringify(malformedConflict), storage);
+  assert.equal(invalidConflict.ok, false);
+  assert.equal(storage.getItem(forwardArchive.STORAGE_KEY), before);
+});
+
+test("forward archive restore rejects corrupted local records without overwriting them", () => {
+  const storage = memoryStorage();
+  const malformed = {
+    schemaVersion: 1, symbol: "XAUUSD",
+    trackingStartedAt: "2026-11-27T11:00:00.000Z",
+    records: [{ key: "tampered" }], conflicts: []
+  };
+  storage.setItem(forwardArchive.STORAGE_KEY, JSON.stringify(malformed));
+  const source = memoryStorage();
+  forwardArchive.capture(forwardPayload("2026-11-27T11:00:00.000Z"), source);
+  const result = forwardArchive.restoreBackup(forwardArchive.exportBackup(source), storage);
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "LOCAL_ARCHIVE_INVALID");
+  assert.deepEqual(forwardArchive.read(storage), malformed);
+});
