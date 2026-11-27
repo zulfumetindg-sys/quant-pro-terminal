@@ -292,7 +292,11 @@ function createSignal(candles, h4Candles, currentPrice) {
   const base = {
     volatilityShock,
     executionStatus: "RESEARCH_ONLY_NOT_TRADE_READY",
-    maxRiskPercent: 0.5,
+    maxRiskPercent: 2,
+    accountCurrency: "EUR",
+    accountBalanceScenariosEUR: [160, 300, 500],
+    riskBudgetScenariosEUR: [3.2, 6, 10],
+    riskSizingStatus: "PLANNING_ONLY_BROKER_SPEC_AND_COSTS_UNVERIFIED",
     historicalWinProbability: "UNAVAILABLE",
     backtestStatus: "NOT_INDEPENDENTLY_VALIDATED",
     timeframe: "H1 + COMPLETED H4",
