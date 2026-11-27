@@ -94,14 +94,9 @@ test("historical backtest handler fetches every period with its own bounded warm
       calls.map(call => call.url.searchParams.get("start_date")),
       ["2026-04-01 00:00:00", "2026-06-01 00:00:00", "2026-08-02 00:00:00"]
     );
-    assert.deepEqual(
-      response.payload.results.map(result => result.warmupComplete),
-      [true, true, true]
-    );
-    assert.deepEqual(
-      response.payload.results.map(result => result.continuityComplete),
-      [true, true, true]
-    );
+    assert.equal(response.payload.results.length, 6);
+    assert.ok(response.payload.results.every(result => result.warmupComplete === true));
+    assert.ok(response.payload.results.every(result => result.continuityComplete === true));
   } finally {
     global.fetch = originalFetch;
     if (originalKey === undefined) delete process.env.TWELVE_DATA_API_KEY;
