@@ -173,6 +173,14 @@ async function redisCommand(path, method, body, env, operation) {
     });
     throw storageError("JOURNAL_STORAGE_COMMAND_FAILED", "UPSTREAM_COMMAND_" + category);
   }
+  if (!payload || typeof payload !== "object" ||
+      !Object.prototype.hasOwnProperty.call(payload, "result")) {
+    console.error("[manual-journal] Redis response missing result field", {
+      operation,
+      httpStatus: response.status
+    });
+    throw storageError("JOURNAL_STORAGE_UNAVAILABLE", "UPSTREAM_INVALID_RESPONSE");
+  }
   return payload.result;
 }
 
