@@ -221,7 +221,7 @@ if (process.env.REPORT_OUTPUT) fs.writeFileSync(process.env.REPORT_OUTPUT, repor
 const requiredComplete = results.filter(x =>
   ["MAYIS_HAZIRAN", "TEMMUZ_AGUSTOS"].includes(x.period)
 );
-if (requiredComplete.length !== 4 || requiredComplete.some(x =>
+if (requiredComplete.length !== slippageScenarios.length * 2 || requiredComplete.some(x =>
   x.periodStatus !== "PERIOD_COMPLETE" ||
   x.warmupComplete !== true ||
   x.continuityComplete !== true ||
