@@ -59,13 +59,34 @@ const slippageScenarios = [0.10, 0.20, 0.30, 0.50];
 
 function summarize(trades) {
   const ordered = [...trades].sort((a, b) => Date.parse(a.exitTime) - Date.parse(b.exitTime));
-  let equity = 0, peak = 0, maxDD = 0, streak = 0, longest = 0;
+  let equity = 0, peak = 0, maxDD = 0, peakTime = null;
+  let maxDDStart = null, maxDDEnd = null;
+  let streak = 0, longest = 0, streakStart = null;
+  let longestStreakStart = null, longestStreakEnd = null;
   for (const t of ordered) {
     equity += t.netR;
-    peak = Math.max(peak, equity);
-    maxDD = Math.max(maxDD, peak - equity);
-    if (t.netR < 0) { streak++; longest = Math.max(longest, streak); }
-    else if (t.netR > 0) streak = 0;
+    if (equity > peak) {
+      peak = equity;
+      peakTime = t.exitTime;
+    }
+    const dd = peak - equity;
+    if (dd > maxDD) {
+      maxDD = dd;
+      maxDDStart = peakTime;
+      maxDDEnd = t.exitTime;
+    }
+    if (t.netR < 0) {
+      if (streak === 0) streakStart = t.exitTime;
+      streak++;
+      if (streak > longest) {
+        longest = streak;
+        longestStreakStart = streakStart;
+        longestStreakEnd = t.exitTime;
+      }
+    } else if (t.netR > 0) {
+      streak = 0;
+      streakStart = null;
+    }
   }
   const group = list => {
     const wins = list.filter(t => t.netR > 0).length;
@@ -81,15 +102,35 @@ function summarize(trades) {
       averageR: list.length ? +(net / list.length).toFixed(3) : null
     };
   };
-  const byMonth = {};
-  for (const t of ordered) (byMonth[t.exitTime.slice(0, 7)] ||= []).push(t);
+  const byMonth = {}, byYear = {}, byQuarter = {}, byHourUTC = {};
+  for (const t of ordered) {
+    const date = new Date(t.exitTime);
+    const year = String(date.getUTCFullYear());
+    const month = t.exitTime.slice(0, 7);
+    const quarter = year + "-Q" + (Math.floor(date.getUTCMonth() / 3) + 1);
+    const hour = String(date.getUTCHours()).padStart(2, "0") + ":00";
+    (byMonth[month] ||= []).push(t);
+    (byYear[year] ||= []).push(t);
+    (byQuarter[quarter] ||= []).push(t);
+    (byHourUTC[hour] ||= []).push(t);
+  }
+  const summarizeMap = map => Object.fromEntries(
+    Object.entries(map).map(([key, list]) => [key, group(list)])
+  );
   return {
     overall: group(ordered),
     chronologicalMaxDrawdownR: +maxDD.toFixed(3),
+    maxDrawdownPeakTime: maxDDStart,
+    maxDrawdownTroughTime: maxDDEnd,
     longestConsecutiveLosses: longest,
+    longestLosingStreakStart: longestStreakStart,
+    longestLosingStreakEnd: longestStreakEnd,
     BUY: group(ordered.filter(t => t.side === "BUY")),
     SELL: group(ordered.filter(t => t.side === "SELL")),
-    byExitMonth: Object.fromEntries(Object.entries(byMonth).map(([k, v]) => [k, group(v)]))
+    byExitYear: summarizeMap(byYear),
+    byExitQuarter: summarizeMap(byQuarter),
+    byExitMonth: summarizeMap(byMonth),
+    byExitHourUTC: summarizeMap(byHourUTC)
   };
 }
 
