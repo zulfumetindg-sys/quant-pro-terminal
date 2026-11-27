@@ -233,6 +233,24 @@ function summarize(trades) {
       SELL: group(matched.filter(t => t.side === "SELL"))
     }];
   }));
+  const byEntryYearAndH4TrendStrength = {};
+  for (const trade of ordered) {
+    const value = trade?.trendDiagnostics?.h4EmaSpreadPercent;
+    if (!Number.isFinite(value)) continue;
+    const bucket = trendBuckets.find(x => value >= x.min && value < x.max);
+    if (!bucket) continue;
+    const year = new Date(trade.signalTime).getUTCFullYear();
+    const key = `${year}_${bucket.label}`;
+    (byEntryYearAndH4TrendStrength[key] ||= []).push(trade);
+  }
+  const byEntryYearAndH4TrendStrengthSummary = Object.fromEntries(
+    Object.entries(byEntryYearAndH4TrendStrength).map(([key, list]) => [key, {
+      ...group(list),
+      BUY: group(list.filter(t => t.side === "BUY")),
+      SELL: group(list.filter(t => t.side === "SELL")),
+      sampleAdequacy: list.length >= 30 ? "DESCRIPTIVE_SAMPLE_30_PLUS" : "LOW_SAMPLE_INSUFFICIENT_FOR_FILTER_DECISION"
+    }])
+  );
   const byEntryYearAndVolatilityRegime = {};
   for (const trade of ordered) {
     const ratio = trade?.volatilityShock?.ratio;
@@ -279,6 +297,7 @@ function summarize(trades) {
     byH1TrendStrength,
     byH4TrendStrength,
     byMomentumStrength,
+    byEntryYearAndH4TrendStrength: byEntryYearAndH4TrendStrengthSummary,
     trendStrengthInterpretation: "EXPLORATORY_DESCRIPTIVE_BINS_NOT_VALIDATED_FILTERS",
     volatilityRegimeInterpretation: "EXPLORATORY_DESCRIPTIVE_BINS_NOT_VALIDATED_FILTERS"
   };
