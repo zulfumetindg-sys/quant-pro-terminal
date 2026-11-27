@@ -1043,3 +1043,27 @@ test("manual journal rejects incomplete negative mutation results", async () => 
     else process.env.KV_REST_API_TOKEN = saved.redis;
   }
 });
+
+
+test("historical period is not scored without its own 400 H1 and 100 H4 warmup", () => {
+  const base = Date.UTC(2026, 4, 1, 0, 0, 0);
+  const data = Array.from({ length: 1000 }, (_, i) =>
+    candle(base + i * 3600000, 2300 + i * 0.03 + 2 * Math.sin(i / 9), 1)
+  );
+  const h4 = backtest.makeH4(data);
+  const indicators = backtest.buildIndicators(data);
+  const tooEarly = backtest.runBacktest(
+    data, h4, indicators, 0.1,
+    { name: "NO_WARMUP", start: new Date(base).toISOString(), end: new Date(base + 48 * 3600000).toISOString() }
+  );
+  assert.equal(tooEarly.periodStatus, "PERIOD_WARMUP_INCOMPLETE");
+  assert.equal(tooEarly.metrics, null);
+  assert.equal(tooEarly.warmupAvailable.completedH1, 0);
+
+  const warmed = backtest.runBacktest(
+    data, h4, indicators, 0.1,
+    { name: "WARMED", start: new Date(base + 500 * 3600000).toISOString(), end: new Date(base + 600 * 3600000).toISOString() }
+  );
+  assert.notEqual(warmed.periodStatus, "PERIOD_WARMUP_INCOMPLETE");
+  assert.equal(warmed.warmupComplete, undefined);
+});
