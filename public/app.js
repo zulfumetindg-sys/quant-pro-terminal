@@ -247,7 +247,7 @@ async function loadForwardTest() {
     const payload = await response.json();
     if (!response.ok || !payload.ok) {
       const reasons = {
-        FORWARD_TEST_DATA_GAP: "İleri test döneminde 72 saati aşan veri boşluğu var. Eksik dönem performansı hesaplanmadı.",
+        FORWARD_TEST_DATA_GAP: "İleri test döneminde 72 saati aşan veri boşluğu veya 72 saatten eski son mum var. Performans hesaplanmadı.",
         FORWARD_TEST_WARMUP_INCOMPLETE: "İleri test başlangıcından önce gereken H1/H4 geçmişi artık mevcut değil. Güvenilir sonuç üretilemedi."
       };
       throw new Error(reasons[payload.error] || payload.message || payload.error || "İleri test başarısız.");
