@@ -384,6 +384,23 @@ test("stale and future last_quote_at values are rejected", async () => {
 });
 
 
+test("forward trade integrity rejects pre-start, duplicate and invalid closed trades", () => {
+  const start = Date.UTC(2026, 10, 26, 20, 0, 0);
+  const trade = {
+    side: "BUY",
+    signalTime: new Date(start + 3600000).toISOString(),
+    exitTime: new Date(start + 7200000).toISOString(),
+    entry: 100, stopLoss: 99, takeProfit: 102, exit: 102, netR: 2
+  };
+  assert.equal(backtest.validateForwardTradeSequence([trade], null, start, start + 7200000).valid, true);
+  assert.equal(backtest.validateForwardTradeSequence([trade, trade], null, start, start + 7200000).reason, "DUPLICATE_SIGNAL_TIME");
+  const beforeStart = { ...trade, signalTime: new Date(start).toISOString() };
+  assert.equal(backtest.validateForwardTradeSequence([beforeStart], null, start, start + 7200000).reason, "TRADE_NOT_STRICTLY_AFTER_FORWARD_START");
+  const open = { ...trade, open: true, status: "OPEN_NOT_COUNTED" };
+  assert.equal(backtest.validateForwardTradeSequence([], open, start, start + 7200000).openTradeExcluded, true);
+  assert.equal(backtest.validateForwardTradeSequence([trade], open, start, start + 7200000).reason, "INVALID_OR_DUPLICATE_OPEN_TRADE");
+});
+
 test("forward test excludes the pinned start candle and all earlier signal closes", () => {
   const start = Date.UTC(2026, 10, 26, 20, 0, 0);
   assert.equal(backtest.isForwardSignalTime(start - 1), false);
