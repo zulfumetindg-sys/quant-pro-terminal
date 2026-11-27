@@ -198,16 +198,23 @@ async function loadBacktest() {
       '<p>Motor: ' + esc(payload.engine) + ' · Mum: ' + esc(payload.candleCount) +
       ' · Spread: ' + esc(payload.costModel && payload.costModel.spreadUSD) +
       ' · Kayma: işlem başına yön bazında $0.10 / $0.20 senaryoları</p>' +
-      periods.map(period =>
-        '<div class="backtest-row"><b>' + esc(period.period) + ' · Kayma/yan: ' + esc(period.slippagePerSideUSD) + '</b>' +
-        '<span>İşlem: ' + esc(period.metrics.tradeCount) + '</span>' +
-        '<span>WR: ' + (period.metrics.winRatePercent == null ? "—" : esc(period.metrics.winRatePercent) + "%") + '</span>' +
-        '<span>PF: ' + esc(period.metrics.profitFactor) + '</span>' +
-        '<span>Net: ' + esc(period.metrics.netProfitR) + 'R</span>' +
-        '<span>DD: ' + esc(period.metrics.maxDrawdownR) + 'R</span>' +
-        '<span>' + (period.metrics.insufficientSample ? "Örneklem yetersiz" : "30+ işlem") + '</span>' +
-        '<span>' + (period.periodComplete ? "Dönem tamamlandı" : "Dönem sürüyor · açık işlem sayılmadı") + '</span></div>'
-      ).join("") +
+      periods.map(period => {
+        if (period.periodStatus === "PERIOD_WARMUP_INCOMPLETE" || !period.metrics) {
+          return '<div class="backtest-row"><b>' + esc(period.period) + ' · Kayma/yan: ' + esc(period.slippagePerSideUSD) + '</b>' +
+            '<span>Performans: HESAPLANMADI</span>' +
+            '<span>H1 geçmişi: ' + esc(period.warmupAvailable && period.warmupAvailable.completedH1) + '/400</span>' +
+            '<span>H4 geçmişi: ' + esc(period.warmupAvailable && period.warmupAvailable.completedH4) + '/100</span>' +
+            '<span>Gösterge ısınma verisi yetersiz</span></div>';
+        }
+        return '<div class="backtest-row"><b>' + esc(period.period) + ' · Kayma/yan: ' + esc(period.slippagePerSideUSD) + '</b>' +
+          '<span>İşlem: ' + esc(period.metrics.tradeCount) + '</span>' +
+          '<span>WR: ' + (period.metrics.winRatePercent == null ? "—" : esc(period.metrics.winRatePercent) + "%") + '</span>' +
+          '<span>PF: ' + esc(period.metrics.profitFactor) + '</span>' +
+          '<span>Net: ' + esc(period.metrics.netProfitR) + 'R</span>' +
+          '<span>DD: ' + esc(period.metrics.maxDrawdownR) + 'R</span>' +
+          '<span>' + (period.metrics.insufficientSample ? "Örneklem yetersiz" : "30+ işlem") + '</span>' +
+          '<span>' + (period.periodComplete ? "Dönem tamamlandı" : "Dönem sürüyor · açık işlem sayılmadı") + '</span></div>';
+      }).join("") +
       '<p class="risk-note">Tüm altı maliyet/dönem kombinasyonu gösterilir. OHLC simülasyonudur; canlı kazanma olasılığı değildir. Gerçek bid/ask, spread, komisyon ve kayma doğrulanmamıştır. Tamamlanmamış dönemde açık işlemler sonuçlara dahil edilmez.</p>';
   } catch (error) {
     output.textContent = "Geri test alınamadı: " + error.message;
